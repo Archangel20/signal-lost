@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#14161b">
+<title>Signal Lost — the city is learning you</title>
+<meta name="description" content="A 3D street runner against a city that learns your habits. Dodge, jump, slide — and stay unpredictable.">
+<meta property="og:title" content="Signal Lost">
+<meta property="og:description" content="The city is learning you. Stay unpredictable.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2314161b'/%3E%3Cpath d='M16 5l3.4 7 7.6 1-5.6 5.2 1.5 7.6L16 22l-6.9 3.8 1.5-7.6L5 13l7.6-1z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game" aria-label="Signal Lost game view" role="img"></canvas>
+
+<div id="hud" class="hidden" aria-live="off">
+  <div id="topright">
+    <div id="money">$0</div>
+    <div id="mult"></div>
+    <div id="wanted" aria-label="City threat level">
+      <svg id="stars" viewBox="0 0 150 30" aria-hidden="true"></svg>
+    </div>
+    <div id="predict">City prediction 0%</div>
+    <div id="jam"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9m0 0 4 4m-4-4-4 4M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".55"/></svg><span id="jamtxt">Signal jammed</span></div>
+  </div>
+  <div id="mapwrap"><canvas id="minimap" aria-label="Minimap"></canvas></div>
+  <div id="toasts"></div>
+  <div id="hint" class="hidden"></div>
+  <div id="subs"><span class="who">City Watch</span><span class="msg"></span></div>
+</div>
+
+<div id="title" class="screen">
+  <div class="tcol">
+    <div class="kicker">Endless street runner · adaptive city AI</div>
+    <h1>Signal<br>Lost</h1>
+    <p class="tag">The city is learning you.</p>
+    <ul class="how">
+      <li>It tracks which lane you live in, which way you dodge, when you jump.</li>
+      <li>Then it puts the roadblock exactly where you will be.</li>
+      <li>Stay unpredictable. Grab a signal jammer to blind it.</li>
+    </ul>
+    <button id="btn-start" type="button" class="cta">Press any key or tap to start</button>
+    <div class="ctrl"><b>← →</b> lane &nbsp; <b>↑</b> jump &nbsp; <b>↓</b> slide &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; · &nbsp; swipe on phones</div>
+    <div id="best"></div>
+  </div>
+</div>
+
+<div id="pause" class="screen hidden"><div class="pcard"><h2>Paused</h2><p>Press P or tap to resume</p></div></div>
+
+<div id="over" class="screen hidden">
+  <div id="wasted"><span id="wtxt">Wasted</span></div>
+  <div id="card">
+    <div class="chead"><span>How the city read you</span><span id="csub"></span></div>
+    <div id="crows"></div>
+    <div id="lanes"></div>
+    <div id="verdict"></div>
+    <div id="tip"></div>
+    <div class="cfoot">
+      <div class="sc"><small>Earned</small><b id="cscore">$0</b><i id="cnew"></i></div>
+      <button id="btn-retry" type="button" class="cta">Try again <small>(Space)</small></button>
+    </div>
+  </div>
+</div>
+
+<div id="btns">
+  <button id="btn-mute" type="button" aria-label="Toggle sound (M)" title="Sound (M)"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path class="w" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+  <button id="btn-full" type="button" aria-label="Toggle fullscreen (F)" title="Fullscreen (F)"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+</div>
+<noscript><p style="color:#fff;font-family:sans-serif;text-align:center">Signal Lost needs JavaScript and WebGL.</p></noscript>
+<div id="nogl" class="screen hidden"><div class="pcard"><h2>WebGL unavailable</h2><p>This game needs a browser with WebGL enabled.</p></div></div>
+<script src="js/vendor/three.min.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/game.js"></script>
+<script src="js/render3d.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
