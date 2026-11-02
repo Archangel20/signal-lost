@@ -201,7 +201,7 @@
   Game.emit = function (type, o) { this.events.push(Object.assign({ type }, o)); };
 
   /* ------------------------------------------------------------ input actions */
-  Game.act = function (a) { if (this.state === 'play' || this.attract) this.q.push(a); };
+  Game.act = function (a) { if ((this.state === 'play' || this.attract) && this.q.length < 1) this.q.push(a); };   // at most 1 pending input
   Game.threatIn = function (lane, maxZ) {
     let best = null;
     for (const o of this.obs) {
@@ -404,6 +404,7 @@
     // ---- pickups
     for (const c of g.coinsL) {
       if (c.taken) continue;
+      if (g.magT > 0 && c.z < 16 && c.z > -1 && !g.attract) { const k = 1 - Math.exp(-dt * (5 + (16 - c.z) * .35)); c.lane += (p.x - c.lane) * k; c.y += ((p.y + .55) - c.y) * k * .7; }   // magnet pulls cash toward the rider
       if (Math.abs(c.z) < 0.9 && Math.abs(p.x - c.lane) < 0.62 && Math.abs(c.y - (p.y + 0.55)) < 0.85) {
         c.taken = true; g.coins++; g.addCombo(0.5);
         g.score += CX * 25 * g.mult * g.coinMul * (g.x2T > 0 ? 2 : 1); br.log.coins++; g.mEvent('coins');
@@ -521,6 +522,10 @@
 
   Game.hit = function (o) {
     const g = this, p = g.p;
+    if (g.shieldT > 0 && !g.attract && p.inv <= 0) {                 // shield: absorbs exactly one hit, then a short grace window
+      g.shieldT = 0; p.inv = 1.3; g.shake(2); g.fx.flash = 0.5; g.fx.freeze = 0.05; g.fx.zoom = 0.8;
+      const sp = g.playerScreen(); g.pop('SHIELD BROKE', sp.x, sp.y - 40, '#8fc3e8', 1, 0.9); g.emit('shieldhit'); return;
+    }
     // side-swipe? bounce back to the lane we came from instead of dying
     const lateral = Math.abs(p.x - p.lane) > 0.1 || (g.clock - p.switchT < 0.12);
     if (lateral && p.prevLane !== p.lane && !laneBlocked(g, p.prevLane, -1.2, 1.2)) {

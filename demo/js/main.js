@@ -6,8 +6,8 @@
   let lastStars = 0, W = 0, H = 0, audioOn = false, paused = false, frozen = false, lastBlind = false, startedAt = 0, glOK = true;
   G.hint = !(Save.data.tut && Save.data.tut.done);
   function syncUp() { G.up = Object.assign({ jam: 0, cash: 0, turbo: 0, bail: 0 }, Save.data.up); G.perk = Save.perk(); G.loc = Save.data.loc | 0; if (G.state === 'title' || G.attract) G.stage = G.loc; }
-  function syncOutfit() { if (glOK) { try { Render.setOutfit(Save.OUTFITS[Save.data.outfit] || Save.OUTFITS.courier); } catch (e) { console.warn('outfit', e); } } }
-  function syncAudioSettings() { const s = Save.data.set; Sfx.setMusicEnabled(s.music); Sfx.setSfxEnabled(s.sfx); }
+  function syncOutfit() { try { Sfx.setVoiceChar(Save.data.outfit); } catch (e) {} if (glOK) { try { Render.setOutfit(Save.OUTFITS[Save.data.outfit] || Save.OUTFITS.courier); } catch (e) { console.warn('outfit', e); } } }
+  function syncAudioSettings() { const s = Save.data.set; Sfx.setMusicEnabled(s.music); Sfx.setSfxEnabled(s.sfx); Sfx.setVoiceEnabled(s.voice !== false); try { Sfx.setVoiceChar(Save.data.outfit); } catch (e) {} }
   syncUp();
 
   /* ---------- sizing (full-resolution, devicePixelRatio aware; no low-res buffer) ---------- */
@@ -41,6 +41,8 @@
         Save.recordRun({ score: G.finalScore || 0, time: G.time, near: G.nearCount, jams: G.jams, bails: G.bails, pts: G.finalPts, coins: G.coins, words: G.wordsDone, missions: G.missionsDone, dist: G.dist });
       }
       if ((e.type === 'crash' || e.type === 'bail' || e.type === 'bikelost') && !G.god && Save.data.set.haptics && navigator.vibrate) { try { navigator.vibrate(e.type === 'crash' || e.type === 'bikelost' ? [60, 40, 140] : 45); } catch (_) {} }
+      if (!G.attract && !G.god) { try { feel(e); } catch (_) {} }
+      if (!G.attract) { try { if (e.type === 'bikelost') Render.gesture('lose'); else if (e.type === 'bikeback') Render.gesture('win'); else if (e.type === 'outplay') Render.gesture('flair'); } catch (_) {} }
       if (!audioOn) continue;
       try {
         switch (e.type) {
@@ -51,11 +53,12 @@
           case 'coin': Sfx.coin(G.combo); break;
           case 'near': Sfx.near(); break;
           case 'outplay': Sfx.outplay(); break;
-          case 'bump': case 'edge': Sfx.bump(); break;
-          case 'crash': Sfx.crash(); break;
-          case 'bail': Sfx.bail(); break;
-          case 'bikelost': Sfx.bikeLost(); Sfx.duck(0.6, 0.8); break;
-          case 'bikeback': Sfx.bikeBack(); break;
+          case 'bump': Sfx.bump(); if (!G.attract) Sfx.voice('hit'); break;
+          case 'edge': Sfx.bump(); break;
+          case 'crash': Sfx.crash(); if (!G.attract && !G.god) Sfx.voice('hit'); break;
+          case 'bail': Sfx.bail(); if (!G.attract) Sfx.voice('hit'); break;
+          case 'bikelost': Sfx.bikeLost(); Sfx.duck(0.6, 0.8); if (!G.attract) setTimeout(() => Sfx.voice('lose'), 260); break;
+          case 'bikeback': Sfx.bikeBack(); if (!G.attract) setTimeout(() => Sfx.voice('win'), 120); break;
           case 'chip': Sfx.glitch(); Sfx.duck(); break;
           case 'blindEnd': Sfx.glitchEnd(); break;
           case 'speedup': Sfx.speedup(); break;
@@ -72,6 +75,9 @@
           case 'cloak': Sfx.glitchEnd(); break;
           case 'boost': Sfx.boost(); break;
           case 'x2': Sfx.x2(); break;
+          case 'shield': Sfx.shield(); break;
+          case 'shieldhit': Sfx.shieldHit(); break;
+          case 'magnet': Sfx.magnet(); break;
           case 'task': Sfx.letter(3); break;
           case 'taskdone': Sfx.mission(); break;
           case 'parcel': Sfx.x2(); break;
@@ -87,7 +93,7 @@
   const locked = () => performance.now() - overAt < LOCK_MS;
   function startGame() {
     if (performance.now() - startedAt < 500) return;       // double-start guard (double tap / click + key in the same moment)
-    wake(); syncUp(); G.reset(false); G.runSaved = false; G.bankedRun = 0; lastStars = 0; paused = false; G.paused = false; startedAt = performance.now();
+    introEnd(); wake(); syncUp(); G.reset(false); G.runSaved = false; G.bankedRun = 0; lastStars = 0; paused = false; G.paused = false; startedAt = performance.now(); setTimeout(() => { try { if (G.state === 'play' && !G.attract) { Sfx.voice('start'); Render.gesture('start', true); } } catch (e) {} }, 420);
     try { Sfx.start(); } catch (e) {}
     try { const nm = Sfx.nextTrack ? Sfx.nextTrack() : ''; if (nm) HUD.nowPlaying(nm); if (audioOn) { Sfx.startMusic(); } } catch (e) {}
   }
@@ -100,7 +106,7 @@
   function retry() { if (G.state === 'over' && G.overT > 0.7 && !locked()) { G.hint = false; startGame(); } }
   function goHome() {                                  // game over -> title (attract) screen
     if (G.state !== 'over' || locked()) return;
-    paused = false; G.paused = false; G.hint = false; syncUp(); G.reset(true); startedAt = performance.now();
+    paused = false; G.paused = false; G.hint = false; syncUp(); G.reset(true); startedAt = performance.now(); introBegin(true);
     try { Sfx.uiBlip(); } catch (e) {}
   }
   function press() { // START button only; resume from pause
@@ -131,29 +137,35 @@
 
   /* ---------- pointer / swipe ---------- */
   let ptr = null;
-  const TH = 14;                      // a continuing drag can fire further swipes: the origin resets after each one (chained swipes are never dropped)
+  const TH = 30;                      // ONE action per finger gesture: fires the first time the drag passes TH px, then the gesture is locked until pointerup / pointercancel
   const isBtn = e => !!(e.target.closest && e.target.closest('button, .modal'));
   document.addEventListener('pointerdown', e => {
     if (isBtn(e)) return;
     if ((G.state === 'title' || G.state === 'over' || G.state === 'dead') && !G.paused) { wake(); return; }   // title / game over: only the buttons act (taps and swipes are ignored)
     e.preventDefault(); wake();
+    if (ptr && e.pointerId !== ptr.id && performance.now() - ptr.t < 4000) return;   // a second finger never starts another gesture
     try { document.body.setPointerCapture(e.pointerId); } catch (_) {}
-    ptr = { id: e.pointerId, x: e.clientX, y: e.clientY, ox: e.clientX, oy: e.clientY, moved: false, t: performance.now() };
+    ptr = { id: e.pointerId, ox: e.clientX, oy: e.clientY, fired: false, t: performance.now() };
   });
   document.addEventListener('pointermove', e => {
     if (!ptr || e.pointerId !== ptr.id) return;
     e.preventDefault();
-    const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y, th = ptr.th || TH;
-    if (Math.abs(dx) > th && Math.abs(dx) > Math.abs(dy) * 0.8) { ptr.moved = true; ptr.th = 46; ptr.x = e.clientX; ptr.y = e.clientY; if (G.state === 'play' && !paused) G.act(dx < 0 ? 'L' : 'R'); }
-    else if (dy < -th && Math.abs(dy) > Math.abs(dx)) { ptr.moved = true; ptr.th = 46; ptr.x = e.clientX; ptr.y = e.clientY; if (G.state === 'play' && !paused) G.act('J'); }
-    else if (dy > th && Math.abs(dy) > Math.abs(dx)) { ptr.moved = true; ptr.th = 46; ptr.x = e.clientX; ptr.y = e.clientY; if (G.state === 'play' && !paused) G.act('S'); }
+    if (ptr.fired) return;                                // gesture already used: ignore all further movement until the finger lifts
+    const dx = e.clientX - ptr.ox, dy = e.clientY - ptr.oy, ax = Math.abs(dx), ay = Math.abs(dy);
+    let a = null;
+    if (ax > TH && ax > ay * 0.8) a = dx < 0 ? 'L' : 'R';
+    else if (ay > TH && ay > ax) a = dy < 0 ? 'J' : 'S';
+    if (!a) return;
+    ptr.fired = true;
+    if (G.state === 'play' && !paused) G.act(a);
   });
   const up = e => {
     if (!ptr || e.pointerId !== ptr.id) return;
-    const tap = !ptr.moved && Math.hypot(e.clientX - ptr.ox, e.clientY - ptr.oy) < 12; ptr = null;
+    const tap = !ptr.fired && Math.hypot(e.clientX - ptr.ox, e.clientY - ptr.oy) < 12; ptr = null;
     if (tap && paused) setPaused(false);                 // pause overlay: tap to resume (the only tap-anywhere action left)
   };
-  document.addEventListener('pointerup', up); document.addEventListener('pointercancel', () => { ptr = null; });
+  document.addEventListener('pointerup', up); document.addEventListener('pointercancel', e => { if (ptr && e.pointerId === ptr.id) ptr = null; });
+  window.addEventListener('blur', () => { ptr = null; });
   document.addEventListener('contextmenu', e => e.preventDefault());
   document.addEventListener('touchmove', e => { if (!(e.target.closest && e.target.closest('.scroll'))) e.preventDefault(); }, { passive: false });
 
@@ -173,14 +185,64 @@
   window.addEventListener('blur', () => setPaused(true));
   syncMute();
 
+  /* ---------- game feel: slow-mo, camera punch, sparkle, haptics ---------- */
+  let slowT = 0, slowD = 0, slowDepth = 0;
+  const buzz = (pat) => { if (Save.data.set.haptics && navigator.vibrate) { try { navigator.vibrate(pat); } catch (_) {} } };
+  function slowmo(dur, depth) { if (dur >= slowT * .8) { slowT = slowD = dur; slowDepth = depth; } }
+  function feel(e) {
+    switch (e.type) {
+      case 'near': slowmo(e.how === 'late dodge' ? 0.32 : 0.26, 0.55); Render.punch(0.9); buzz(14); break;
+      case 'coin': Render.sparkle(5); break;
+      case 'shield': Render.sparkle(18, [.6, .8, 1], 1.6); Render.punch(.5); buzz(22); break;
+      case 'shieldhit': slowmo(0.4, 0.65); Render.punch(1.4); Render.sparkle(26, [.7, .85, 1], 2.2); buzz([30, 30, 30]); break;
+      case 'magnet': Render.sparkle(16, [1, .55, .4], 1.4); Render.punch(.5); buzz(22); break;
+      case 'x2': Render.sparkle(16, [.6, 1, .5], 1.4); buzz(20); break;
+      case 'boost': Render.punch(1.2); buzz([18, 20, 18]); break;
+      case 'ramp': Render.punch(.8); break;
+    }
+  }
+  const slowScale = (dt) => { if (slowT <= 0) return 1; slowT = Math.max(0, slowT - dt); const k = slowT / slowD, e = k > .5 ? 1 : k * 2; return 1 - slowDepth * e * e * (3 - 2 * e); };
+  /* speed lines: thin, calm white streaks at the screen edges, only at high speed / boost */
+  const sl = document.createElement('canvas'); sl.id = 'fx-speed'; document.body.insertBefore(sl, document.getElementById('hud')); const slc = sl.getContext('2d'); let slOn = false, slR = 0;
+  function speedLines(t) {
+    const inten = (G.state === 'play' && !G.attract && !paused) ? clamp((G.speed - 31) / 12, 0, 1) * .55 + (G.boostK || 0) * .6 : 0;
+    if (inten < .04) { if (slOn) { slc.clearRect(0, 0, sl.width, sl.height); slOn = false; } return; }
+    slOn = true; const w0 = Math.round(innerWidth * .5), h0 = Math.round(innerHeight * .5); if (sl.width !== w0 || sl.height !== h0) { sl.width = w0; sl.height = h0; } const w = w0, h = h0, cx = w / 2, cy = h * .46, R = Math.hypot(w, h) / 2;
+    slc.clearRect(0, 0, w, h); slc.lineCap = 'round';
+    for (let i = 0; i < 22; i++) { const a = (i * 2.399 + Math.floor(t * 9 + i) * 1.7) % 6.283, ph = ((t * 2.6 + i * .37) % 1), r0 = R * (.5 + ph * .5), r1 = r0 + R * (.1 + .22 * inten);
+      const ca = Math.cos(a), sa = Math.sin(a); slc.strokeStyle = 'rgba(255,255,255,' + (.2 * inten * Math.sin(ph * 3.14)).toFixed(3) + ')'; slc.lineWidth = 1.5; slc.beginPath(); slc.moveTo(cx + ca * r0, cy + sa * r0 * 1.15); slc.lineTo(cx + ca * r1, cy + sa * r1 * 1.15); slc.stroke(); }
+  }
+  /* headstart: one free burst of turbo in the first seconds of a run */
+  { const bh = document.getElementById('btn-head'); if (bh) { for (const ev of ['pointerdown', 'pointerup', 'mousedown', 'touchstart', 'touchend']) bh.addEventListener(ev, e => e.stopPropagation());
+    bh.addEventListener('click', e => { e.stopPropagation(); bh.blur(); if (G.state !== 'play' || G.attract || G.headUsed) return; G.headUsed = true; G.boostT = G.boostMax = 4.5; G.addCombo(1); G.emit('boost'); G.pop('BOOST START', G.W2 || 160, 78, '#f0b24a', 1.2, 1.4); }); } }
+  /* ---------- title intro (full once per page load; short when returning to the menu) ---------- */
+  const titleEl = document.getElementById('title'); let introPh = -1;
+  const noIntro = /[?&]nointro/.test(location.search) || (matchMedia && matchMedia('(prefers-reduced-motion:reduce)').matches);
+  function introBegin(short) {
+    if (noIntro || !glOK) return;
+    try { Render.introStart(!!short); } catch (_) { return; }
+    if (!short) { introPh = 0; titleEl.dataset.intro = '0'; } else { introPh = -1; delete titleEl.dataset.intro; }
+    introRev = short ? .25 : 1.25; introT0 = 0;
+  }
+  let introRev = -1, introT0 = 0;
+  function introEnd() { introPh = -1; delete titleEl.dataset.intro; introRev = -1; try { Render.introSkip(); } catch (_) {} }
+  function introTick() {
+    if (G.state !== 'title') { if (introPh >= 0) introEnd(); introRev = -1; return; }
+    const t = Render.introT(); if (t < 0) { if (introPh >= 0) introEnd(); return; }
+    if (introRev >= 0 && t >= introRev - .35) { introRev = -1; try { if (audioOn) Sfx.rev(); } catch (_) {} }
+    if (introPh < 0) return;
+    const ph = t >= 3.3 ? 2 : t >= 2.3 ? 1 : 0;
+    if (ph !== introPh) { introPh = ph; titleEl.dataset.intro = String(ph); if (ph === 1) { try { if (audioOn) Sfx.slam(); } catch (_) {} try { Render.sky(); } catch (_) {} } }
+  }
+  titleEl.addEventListener('pointerdown', () => { if (introPh >= 0 || Render.introT() >= 0) introEnd(); }, true);
   /* ---------- loop ---------- */
   const DT = 1 / 120; let acc = 0, last = performance.now();
   function frame(now) {
     requestAnimationFrame(frame);
-    let dt = Math.min(0.1, (now - last) / 1000); last = now;
+    let dt = Math.max(0, Math.min(0.1, (now - last) / 1000)); last = now;
     if (!frozen) {
       if (!paused) {
-        const ts = G.state === 'dead' ? 0.4 : 1;
+        const ts = G.state === 'dead' ? 0.4 : slowScale(dt);
         acc += dt * ts;
         // sim time == real time: split the frame into equal sub-steps (each <= 1/120 s) instead of leaving a fractional remainder (that remainder was a visible judder)
         if (acc >= DT * .5) { const n = Math.min(24, Math.ceil(acc / DT - 1e-6)), h = acc / n; for (let i = 0; i < n; i++) G.step(h); acc = 0; }
@@ -199,12 +261,14 @@
         }
       }
       if (glOK) Render.frame(G, dt);
+      speedLines(now / 1000); introTick();
     }
     if (G.state === 'over') { if (!overSeen) { overSeen = true; overAt = performance.now(); focusRestart(); } } else overSeen = false;
     HUD.update(dt, paused);
   }
   let overSeen = false;
   function focusRestart() { if (!document.documentElement.classList.contains('touch')) setTimeout(() => { const b = document.getElementById('btn-retry'); if (G.state === 'over' && b) b.focus({ preventScroll: true }); }, LOCK_MS + 50); }
+  introBegin(false);
   requestAnimationFrame(frame);
 
   /* ---------- debug / test API ---------- */

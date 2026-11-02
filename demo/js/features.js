@@ -116,8 +116,9 @@
     } else if (g.time >= g.nextTokenAt) {
       // 4) double cash token
       const lane = others.length ? pick(others) : fl;
-      g.nextTokenAt = g.time + 30 + rnd() * 16;
-      g.items.push({ kind: 'x2', lane, z: z + (others.length ? 6 : 15), y: 0.95, taken: false });
+      g.nextTokenAt = g.time + 22 + rnd() * 14;
+      const tk = ['x2', 'shield', 'magnet'][(g.tokSeq = ((g.tokSeq || 0) + 1) % 3)];      // power-up variety: double cash, shield (absorbs one hit), magnet (pulls cash in)
+      g.items.push({ kind: tk, lane, z: z + (others.length ? 6 : 15), y: 0.95, taken: false });
     }
   };
 
@@ -211,7 +212,7 @@
     const g = this;
     g.items = []; g.word = opts && opts.word || (global.Save && global.Save.data.stats.runs === 0 ? 'LAGOS' : pick(WORDS)); g.wordIdx = 0; g.wordsDone = 0; g.lettersGot = 0; g.wordFlash = 0; g.lastWord = '';
     g.nextLetterAt = 5; g.nextPadAt = 12; g.nextRampAt = 22; g.nextTokenAt = 34;
-    g.boostT = 0; g.boostK = 0; g.x2T = 0; g.copsDodged = 0; g.rampCount = 0; g.padCount = 0; g.coinMul = 1 + 0.25 * (g.up.cash || 0) + (g.perk.cash || 0); g.wheelNext = 12; g.wheelT = 0; g.cloakNext = 10; g.cloakT = 0; g.cloakMax = 6;
+    g.boostT = 0; g.boostK = 0; g.x2T = 0; g.shieldT = 0; g.magT = 0; g.headUsed = false; g.tokSeq = Math.floor(Math.random() * 3); g.copsDodged = 0; g.rampCount = 0; g.padCount = 0; g.coinMul = 1 + 0.25 * (g.up.cash || 0) + (g.perk.cash || 0); g.wheelNext = 12; g.wheelT = 0; g.cloakNext = 10; g.cloakT = 0; g.cloakMax = 6;
     g.nearStreak = 0; g.lastNearT = -99;
     g.missionsDone = 0; g.missions = [];
     for (let i = 0; i < 3; i++) g.missions.push(g.makeMission());
@@ -226,7 +227,7 @@
   };
   G.featPre = function (dt) {   // before speed is computed
     const g = this;
-    g.boostT = Math.max(0, g.boostT - dt); g.x2T = Math.max(0, g.x2T - dt);
+    g.boostT = Math.max(0, g.boostT - dt); g.x2T = Math.max(0, g.x2T - dt); g.shieldT = Math.max(0, (g.shieldT || 0) - dt); g.magT = Math.max(0, (g.magT || 0) - dt);
     if (!g.attract && g.state === 'play') {      // legendary abilities fire on their own
       g.cloakT = Math.max(0, g.cloakT - dt);
       if (g.perk.wheelie && g.time >= g.wheelNext) { g.wheelNext = g.time + 40; g.boostT = g.boostMax = 4; g.wheelT = 4; g.mEvent('pad'); g.pop('WHEELIE BOOST', g.W2 || 160, 96, '#f0b24a', 1.2, 1.6); g.emit('wheelie'); }
@@ -275,9 +276,11 @@
       const ax = Math.abs(p.x - it.lane);
       if (it.kind === 'bike') {
         if (Math.abs(it.z) < 1.2 && ax < 0.8 && Math.abs(it.y - (p.y + 0.55)) < 1.3 && !p.dead) { it.taken = true; g.regainBike('pickup'); }
-      } else if (it.kind === 'letter' || it.kind === 'x2') {
+      } else if (it.kind === 'letter' || it.kind === 'x2' || it.kind === 'shield' || it.kind === 'magnet') {
         if (Math.abs(it.z) < 1.1 && ax < 0.72 && Math.abs(it.y - (p.y + 0.55)) < 1.15 && !p.dead) {
           if (it.kind === 'letter') g.collectLetter(it);
+          else if (it.kind === 'shield') { it.taken = true; g.shieldT = 25; g.addCombo(1); g.pop('SHIELD UP', g.W2 || 160, 66, '#8fc3e8', 1.2, 1.4); g.emit('shield'); }
+          else if (it.kind === 'magnet') { it.taken = true; g.magT = 10 + (g.up.turbo || 0); g.magMax = g.magT; g.addCombo(1); g.pop('CASH MAGNET', g.W2 || 160, 66, '#e0644b', 1.2, 1.4); g.emit('magnet'); }
           else {
             it.taken = true; g.x2T = 9 + (g.up.turbo || 0) + (g.perk.turbo || 0); g.x2Max = g.x2T; g.addCombo(1);
             g.pop('DOUBLE CASH', g.W2 || 160, 66, '#79b95f', 1.2, 1.4); g.emit('x2');

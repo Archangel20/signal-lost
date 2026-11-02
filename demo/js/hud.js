@@ -167,9 +167,12 @@
     else if (G.blindT > 0) { c = 'Jammed ' + Math.ceil(G.blindT) + 's'; cl = 'jam'; }
     else if (G.boostT > 0) { c = 'Turbo ' + Math.ceil(G.boostT) + 's'; cl = 'turbo'; }
     else if (G.x2T > 0) { c = '2\u00D7 cash ' + Math.ceil(G.x2T) + 's'; cl = 'x2'; }
+    else if (G.shieldT > 0) { c = 'Shield'; cl = 'shield'; }
+    else if (G.magT > 0) { c = 'Magnet ' + Math.ceil(G.magT) + 's'; cl = 'magnet'; }
     else if (G.cloakT > 0) { c = 'Cloak ' + Math.ceil(G.cloakT) + 's'; cl = 'perk'; }
     else if (G.perk && G.perk.autododge && !G.autoUsed) { c = 'Auto-dodge'; cl = 'perk'; }
     if (G.state === 'dead') c = '';
+    { const bh = document.getElementById('btn-head'); if (bh) { const sh = G.state === 'play' && !G.attract && !G.paused && !G.headUsed && G.time > .4 && G.time < 7; setCls('t_head', bh, 'hidden', !sh); } }
     setCls('t_chip', el.chip, 'hidden', !c); if (c) { setText('chiptxt', el.chip, c); if (last.chcl !== cl) { last.chcl = cl; el.chip.dataset.k = cl; } }
   }
 
@@ -185,15 +188,29 @@
   }
   const coinSvg = '<svg class="coin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.6" fill="#d9a93f" stroke="#7a5a14" stroke-width="1.4"/><circle cx="10" cy="10" r="5.6" fill="none" stroke="#8a6a1c" stroke-width="1.1"/></svg>';
 
+  let cuId = 0;
+  function countUp(rows) {                                         // run-end summary: numbers tick up (ease-out), staggered; the final value is always exact
+    const id = ++cuId, t0 = performance.now(), reduce = global.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    for (const r of rows) if (r[0]) r[0].textContent = r[2](reduce ? r[1] : (r[3] !== undefined ? r[1] - r[3] : 0));
+    if (reduce) return;
+    const tick = (now) => {
+      if (id !== cuId) return; let busy = false;
+      rows.forEach((r, i) => { if (!r[0]) return; const k = Math.min(1, Math.max(0, (now - t0 - 250 - i * 180) / 950)), e = 1 - Math.pow(1 - k, 3), from = r[3] !== undefined ? r[1] - r[3] : 0;
+        r[0].textContent = r[2](k >= 1 ? r[1] : Math.round(from + (r[1] - from) * e)); if (k < 1) busy = true; r[0].parentNode.classList.toggle('ticking', k < 1); });
+      if (busy) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
   function buildCard() {
     last.cardBuilt = true;
     const sm = G.summary || { lines: [], verdict: '', tip: '', overall: 0, share: [.33, .33, .33] };
     const svv = global.Save && Save.data;
     el.cstats.innerHTML =
-      `<div class="cs sc-score"><small>Score</small><b>${num(G.finalPts || 0)}</b></div>` +
+      `<div class="cs sc-score"><small>Score</small><b><span class="cv">${num(G.finalPts || 0)}</span></b></div>` +
       `<div class="cs sc-best"><small>Best score</small><b>${num(G.bestPts || 0)}</b>${G.newBestPts ? '<i>New best</i>' : ''}</div>` +
-      `<div class="cs sc-cash"><small>Cash earned</small><b>${coinSvg}${money(G.bankedRun || G.finalScore || 0)}</b></div>` +
-      `<div class="cs sc-total"><small>Total cash</small><b>${coinSvg}${money(svv ? svv.wallet : 0)}</b></div>`;
+      `<div class="cs sc-cash"><small>Cash earned</small><b>${coinSvg}<span class="cv">${money(G.bankedRun || G.finalScore || 0)}</span></b></div>` +
+      `<div class="cs sc-total"><small>Total cash</small><b>${coinSvg}<span class="cv">${money(svv ? svv.wallet : 0)}</span></b></div>`;
+    countUp([[el.cstats.querySelector('.sc-score .cv'), G.finalPts || 0, num], [el.cstats.querySelector('.sc-cash .cv'), G.bankedRun || G.finalScore || 0, money], [el.cstats.querySelector('.sc-total .cv'), svv ? svv.wallet : 0, money, G.bankedRun || G.finalScore || 0]]);
     el.csub.textContent = 'Survived ' + mmss(G.time);
     el.crows.innerHTML = sm.lines.map(l => `<div class="k">${l.k}</div><div class="v${l.hot ? ' hot' : ''}">${l.v}</div>`).join('');
     const names = ['Left', 'Middle', 'Right'], mx = Math.max.apply(null, sm.share);

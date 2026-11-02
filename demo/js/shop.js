@@ -128,7 +128,7 @@
   Shop.refreshLoc = function () { const n = $('loc-name'); if (n) n.textContent = S.LOCS[S.data.loc].name; };
 
   function refreshSettings() {
-    const set = S.data.set, M = { master: !global.Sfx.muted, music: set.music, sfx: set.sfx, haptics: set.haptics };
+    const set = S.data.set, M = { master: !global.Sfx.muted, music: set.music, sfx: set.sfx, haptics: set.haptics, voice: set.voice !== false };
     settings.querySelectorAll('[data-set]').forEach(b => b.setAttribute('aria-checked', M[b.dataset.set] ? 'true' : 'false'));
   }
   Shop.refreshSettings = refreshSettings;
@@ -165,8 +165,8 @@
     settings.addEventListener('click', e => {
       const b = e.target.closest('[data-set]'); if (!b) return;
       const k = b.dataset.set, set = S.data.set;
-      if (k === 'master') global.Sfx.setMuted(!global.Sfx.muted); else { set[k] = !set[k]; S.save(); }
-      if (k === 'music') global.Sfx.setMusicEnabled(set.music); if (k === 'sfx') global.Sfx.setSfxEnabled(set.sfx);
+      if (k === 'master') global.Sfx.setMuted(!global.Sfx.muted); else { set[k] = k === 'voice' ? !(set.voice !== false) : !set[k]; S.save(); }
+      if (k === 'voice') global.Sfx.setVoiceEnabled(set.voice !== false); if (k === 'music') global.Sfx.setMusicEnabled(set.music); if (k === 'sfx') global.Sfx.setSfxEnabled(set.sfx);
       Shop.hooks.onChange && Shop.hooks.onChange('settings'); refreshSettings();
     });
     [shop, settings].forEach(m => m.addEventListener('pointerdown', e => { if (e.target === m) { m === shop ? Shop.closeShop() : Shop.closeSettings(); } }));

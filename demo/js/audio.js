@@ -532,6 +532,42 @@
   A.setMusicEnabled = function (on) { A.musicEnabled = !!on; if (E) E.musOut.gain.setTargetAtTime(on ? 1 : 0, E.c.currentTime, 0.05); };
   A.setSfxEnabled = function (on) { A.sfxEnabled = !!on; if (E) E.sfxBus.gain.setTargetAtTime(on ? 0.8 : 0, E.c.currentTime, 0.05); };
 
+  /* ------------------------------------------------------------ character voices: SHORT reaction clips (<1.5 s), one at a time, through the same limiter chain */
+  const VOICE_N = { start: 1, hit: 3, lose: 2, win: 2 };
+  const VB = {}, VLOAD = {};       // VB[char][kind] = [AudioBuffer]
+  let vSrc = null, vGain = null, vUntil = 0, vChar = 'courier', vLast = {};
+  A.voiceEnabled = true;
+  A.loadVoice = function (id) {
+    id = id || vChar; vChar = id;
+    if (!A.ctx || VB[id] || VLOAD[id] || !global.fetch) return;
+    VLOAD[id] = true; const out = VB[id] = { start: [], hit: [], lose: [], win: [] };
+    Object.keys(VOICE_N).forEach(kind => {
+      for (let i = 0; i < VOICE_N[kind]; i++) {
+        const nm = kind === 'start' ? id + '_start' : id + '_' + kind + i;
+        fetch('assets/sfx-voice/' + nm + '.mp3?v=10').then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(ab => new Promise((ok, no) => { const p = A.ctx.decodeAudioData(ab, ok, no); if (p && p.catch) p.catch(no); })).then(buf => { out[kind].push(buf); }).catch(() => {});
+      }
+    });
+  };
+  A.voiceInfo = function () { const o = VB[vChar] || {}; return { char: vChar, n: Object.keys(o).map(k => k + ':' + o[k].length).join(' '), max: Math.max.apply(null, [0].concat([].concat.apply([], Object.keys(o).map(k => o[k].map(b => b.duration))))), playing: !!vSrc }; };
+  A.setVoiceChar = function (id) { vChar = id || 'courier'; A.loadVoice(vChar); };
+  A.setVoiceEnabled = function (on) { A.voiceEnabled = !!on; if (!on) A.stopVoice(); };
+  A.stopVoice = function () { try { if (vSrc) vSrc.stop(); } catch (e) {} vSrc = null; };
+  // kind: start | hit | lose | win. start/lose/win may interrupt a hit grunt; hits respect a cooldown.
+  A.voice = function (kind) {
+    if (!E || E.off || !A.enabled || !A.voiceEnabled || A.muted) return;
+    const list = VB[vChar] && VB[vChar][kind]; if (!list || !list.length) return;
+    const t = E.c.currentTime, strong = kind !== 'hit';
+    if (t < vUntil && !strong) return;                          // one voice at a time
+    if (!strong && t - (vLast.hit || -9) < 2.2) return;         // grunt cooldown
+    let i = Math.floor(Math.random() * list.length); if (list.length > 1 && i === vLast[kind + 'i']) i = (i + 1) % list.length; vLast[kind + 'i'] = i;
+    A.stopVoice();
+    if (!vGain) { vGain = E.c.createGain(); vGain.gain.value = 1.15; vGain.connect(E.master); }
+    const s = E.c.createBufferSource(); s.buffer = list[i]; s.connect(vGain); s.start(t + 0.005); vSrc = s;
+    vUntil = t + list[i].duration + 0.25; vLast[kind] = t; if (kind === 'hit') vLast.hit = t;
+    s.onended = () => { if (vSrc === s) vSrc = null; };
+    A.duck(0.35, list[i].duration + 0.2);
+  };
+
   /* ------------------------------------------------------------ SFX (all soft, no square-wave buzz) */
   const S = (fn) => function () { if (!E || !A.enabled) return; fn.apply(null, arguments); };
   A.lane = S(function (dir) { noise(0.17, 0.2, { f: dir > 0 ? 600 : 2600, fTo: dir > 0 ? 2600 : 600, q: 1.1, atk: 0.04, pan: 0.5 * (dir || 0) }); });
@@ -543,6 +579,7 @@
     tone(f, 0.32, 'sine', 0.14, { send: 0.18 }); tone(f * 2, 0.16, 'sine', 0.05);
     tone(f * 1.5, 0.4, 'sine', 0.12, { delay: 0.07, send: 0.18 }); tone(f * 3, 0.2, 'sine', 0.04, { delay: 0.07 });
   });
+  A.thunder = S(function () { noise(2.2, 0.32, { f: 520, fTo: 70, type: 'lowpass', q: 0.5, atk: 0.35, delay: 0.45, send: 0.35 }); tone(52, 1.6, 'sine', 0.22, { slide: 34, delay: 0.5, atk: 0.2 }); A.duck(0.5, 1.8); });
   A.near = S(function () { noise(0.13, 0.12, { f: 2400, fTo: 6000, type: 'highpass', q: 0.7, atk: 0.02 }); tone(990, 0.1, 'triangle', 0.07, { slide: 1480 }); });
   A.outplay = S(function () { [660, 880, 1320].forEach((f, i) => tone(f, 0.4, 'sine', 0.1, { delay: i * 0.075, send: 0.3 })); });
   A.bump = S(function () { tone(125, 0.16, 'sine', 0.3, { slide: 55 }); noise(0.1, 0.16, { f: 600, type: 'lowpass' }); });
@@ -591,6 +628,11 @@
   A.mission = S(function () { [659.3, 830.6, 987.8].forEach((f, i) => tone(f, 0.45, 'sine', 0.1, { delay: i * 0.1, send: 0.3 })); tone(165, 0.3, 'sine', 0.18, { slide: 110 }); });
   A.boost = S(function () { noise(0.7, 0.2, { f: 300, fTo: 5200, q: 0.9, atk: 0.12 }); tone(110, 0.6, 'sawtooth', 0.06, { slide: 330, atk: 0.1 }); });
   A.ramp = S(function () { tone(180, 0.35, 'sine', 0.2, { slide: 520, atk: 0.02 }); noise(0.4, 0.14, { f: 600, fTo: 3600, q: 1, atk: 0.1 }); });
+  A.rev = S(function () { tone(62, 1.1, 'sawtooth', 0.09, { slide: 150, f: 520, atk: 0.1 }); tone(94, 0.9, 'sawtooth', 0.05, { slide: 210, f: 700, atk: 0.1, delay: 0.25 }); noise(0.9, 0.08, { f: 200, fTo: 900, type: 'lowpass', q: 0.6, atk: 0.2 }); });
+  A.slam = S(function () { tone(70, 0.5, 'sine', 0.3, { slide: 38 }); noise(0.18, 0.2, { f: 1400, fTo: 200, type: 'lowpass', q: 0.8 }); tone(1568, 0.5, 'sine', 0.05, { delay: 0.28, send: 0.3 }); });
+  A.shield = S(function () { [523, 784, 1047].forEach((f, i) => tone(f, 0.38, 'triangle', 0.09, { delay: i * 0.05, send: 0.3 })); tone(260, 0.35, 'sine', 0.1, { slide: 520 }); });
+  A.shieldHit = S(function () { noise(0.28, 0.3, { f: 3200, fTo: 700, type: 'bandpass', q: 1.2, send: 0.3 }); tone(880, 0.35, 'triangle', 0.12, { slide: 330, send: 0.3 }); tone(110, 0.3, 'sine', 0.2, { slide: 60 }); A.duck(0.3, 0.5); });
+  A.magnet = S(function () { tone(180, 0.5, 'sawtooth', 0.05, { slide: 420, f: 900 }); tone(420, 0.3, 'sine', 0.09, { delay: 0.18, send: 0.2 }); tone(630, 0.3, 'sine', 0.08, { delay: 0.26, send: 0.2 }); });
   A.x2 = S(function () { [784, 1175, 1568].forEach((f, i) => tone(f, 0.3, 'sine', 0.1, { delay: i * 0.06, send: 0.3 })); });
   A.daily = S(function () { [523.3, 659.3, 784, 1046.5, 1568].forEach((f, i) => tone(f, 0.7, 'sine', 0.09, { delay: i * 0.1, send: 0.4 })); });
 
