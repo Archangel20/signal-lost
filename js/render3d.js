@@ -291,6 +291,28 @@
   /* Characters + bikes come from chars3d.js (CharKit): capsule-limbed riders in layered outfits on a matching vehicle. */
   function buildPlayer(look) { const p = global.CharKit.build(look || (global.Save && global.Save.OUTFITS.courier.look)); scene.add(p.root); return p; }
   function spinWheels(v, dt, sp) { const list = [v.front, v.rear].concat(v.rearList || []); for (const w of list) if (w) w.rotation.x -= sp * dt / (w.userData.R || .3); }
+  /* the wrecked bike: detaches from the rider, tumbles and skids backward into the dust, then shrinks away; it drops back in when regained */
+  function bikeLife(G, dt, p, dead, vx, veh) {
+    const g = veh.group;
+    if (p.foot) {
+      if (!P.bm || P.bm === 'on' || P.bm === 'ret') {
+        scene.add(g); P.bm = 'tumble'; P.bx0 = P.root.position.x; P.bside = P.bx0 > .5 ? -1 : P.bx0 < -.5 ? 1 : (Math.random() < .5 ? -1 : 1);
+        g.visible = true; g.scale.setScalar(1); g.rotation.set(0, 0, 0); g.position.set(P.bx0, 0, 0);
+      }
+      if (P.bm === 'tumble') {
+        const b = G.bikeAnimT, sd = P.bside, e = 1 - Math.exp(-b * 2.3);
+        if (b > 1.55) { P.root.add(g); g.position.set(0, 0, 0); g.rotation.set(0, 0, 0); g.scale.setScalar(1); g.visible = false; P.bm = 'gone'; return; }
+        g.position.set(P.bx0 + sd * 1.7 * e, Math.abs(Math.sin(b * 10)) * .55 * Math.exp(-b * 2.1) + (b < .12 ? b * 3 : 0), 3.4 * e * clamp((G.speed || 18) / 18, .7, 1.3));
+        g.rotation.set(-b * 5.5 * Math.exp(-b * .8), sd * b * 2.4, sd * Math.min(1.45, b * 7));
+        g.scale.setScalar(b > 1.2 ? Math.max(.01, 1 - (b - 1.2) / .35) : 1);
+        spinWheels(veh, dt, 16 * Math.exp(-b * 1.5));
+      }
+    } else if (P.bm === 'tumble' || P.bm === 'gone') {
+      if (P.bm === 'tumble') P.root.add(g);
+      g.position.set(0, 0, 0); g.rotation.set(0, 0, 0); g.visible = true; g.scale.setScalar(G.regainT < .4 ? .01 : 1);
+      P.bm = G.regainT < .4 ? 'ret' : 'on';
+    }
+  }
   function updatePlayer(G, dt) {
     const p = G.p; const a = 1 - Math.exp(-dt * 14);
     vis.x += (p.x - vis.x) * a;
@@ -306,11 +328,26 @@
     const bob = dead || air ? 0 : Math.sin(ph * 2) * (veh.suspend || .01) - cr * .05;
     let tipZ = 0, tipX = 0, pitch = 0;
     Object.assign(t, { rigX: 0, rigY: RP.rigY, rigZ: RP.rigZ, torso: RP.torso, thL: RP.thL, knL: RP.knL, thR: RP.thR, knR: RP.knR, arL: RP.arL, elL: RP.elL, arR: RP.arR, elR: RP.elR, head: RP.head, bob });
-    if (dead) {
+    const foot = !!p.foot, tb = G.bikeAnimT;
+    if (dead && foot) {
+      const d = clamp(G.deadT * 2.6, 0, 1);       // busted on foot: thrown onto their back, arms up, skids a little
+      Object.assign(t, { rigX: 1.45 * d, rigY: 1.0 - .72 * d, rigZ: 0, torso: -.1, thL: .5 - .3 * d, knL: .3 + .6 * d, thR: -.1, knR: .9, arL: 2.5, elL: .4, arR: 1.8, elR: .6, head: .2, bob: 0 });
+      P.root.position.z = Math.min(1.4, G.deadT * 2.2);
+    } else if (dead) {
       const d = clamp(G.deadT * 3.2, 0, 1);
       Object.assign(t, { rigX: 1.5 * d, rigY: RP.rigY - .5 * d, rigZ: RP.rigZ + .3 * d, torso: -.1, thL: .5, knL: .4, thR: -.2, knR: .7, arL: 1.6, elL: .5, arR: .6, elR: .9, head: 0, bob: 0 });
       tipZ = 1.38 * d; tipX = .45 * d;
       P.root.position.z = Math.min(1.1, G.deadT * 1.6);
+    } else if (foot) {
+      // on foot: stumble out of the wreck, then a proper run cycle (thighs, knees, counter-swinging arms, forward lean, hip bounce)
+      P.rph = (P.rph || 0) + dt * (8.2 + (G.speed || 14) * .2); const f = P.rph, s = Math.sin(f), c = Math.cos(f);
+      const w = clamp(1 - tb / .55, 0, 1), W = w * w * (3 - 2 * w), ls = Math.max(0, c), rs = Math.max(0, -c);
+      const run = { rigX: 0, rigY: 1.0 + Math.abs(c) * .06, rigZ: 0, torso: -.3, thL: s * 1.05, knL: .35 + .85 * ls, thR: -s * 1.05, knR: .35 + .85 * rs, arL: -s * .95, elL: 1.25, arR: s * .95, elR: 1.25, head: .28, bob: 0 };
+      const stm = { rigX: -.22 + Math.sin(tb * 16) * .06, rigY: .86, rigZ: 0, torso: -.72, thL: 1.0, knL: .55, thR: -.55, knR: 1.15, arL: 2.4, elL: .35, arR: 1.9, elR: .45, head: .1, bob: 0 };
+      for (const kk in run) t[kk] = run[kk] * (1 - W) + stm[kk] * W;
+      if (sl) { Object.assign(t, { rigY: .62, torso: -1.0, thL: 1.5, knL: 1.5, thR: .9, knR: 1.5, arL: 1.1, arR: 1.1, elL: 1.3, elR: 1.3, head: .6 }); }
+      else if (air) { Object.assign(t, { rigY: 1.05, torso: -.2, thL: 1.35, knL: 1.3, thR: -.45, knR: 1.0, arL: 2.5, elL: .3, arR: 2.1, elR: .3 }); }
+      P.root.position.z = 0; pitch = air ? .06 : 0;
     } else if (sl) {
       Object.assign(t, { rigY: RP.rigY - .17, rigZ: RP.rigZ + .04, torso: RP.torso - .72, arL: RP.arL + .62, arR: RP.arR + .62, elL: RP.elL + .35, elR: RP.elR + .35, head: RP.head + .5 });
       P.root.position.z = 0; tipZ = -vx * .1 + .12;
@@ -320,7 +357,7 @@
       P.root.position.z = 0;
     } else { P.root.position.z = 0; t.torso -= cr * .12; }
     t.bank = dead ? 0 : -vx * .3; t.yaw = dead ? 0 : -vx * .28;
-    const k = dead ? 1 - Math.exp(-dt * 12) : sl || air ? 1 - Math.exp(-dt * 18) : 1 - Math.exp(-dt * 48);
+    const k = dead ? 1 - Math.exp(-dt * 12) : foot ? 1 - Math.exp(-dt * (tb < .55 ? 20 : sl || air ? 22 : 40)) : G.regainT < .35 ? 1 - Math.exp(-dt * 14) : sl || air ? 1 - Math.exp(-dt * 18) : 1 - Math.exp(-dt * 48);
     for (const key in t) pc[key] += ((t[key]) - (pc[key] || 0)) * k;
     const { rig, torso, aL, aR, lL, lR, root } = P;
     rig.rotation.x = pc.rigX; rig.position.y = pc.rigY; rig.position.z = pc.rigZ; torso.rotation.x = pc.torso;
@@ -328,8 +365,13 @@
     aL.sh.rotation.x = pc.arL; aL.el.rotation.x = pc.elL; aR.sh.rotation.x = pc.arR; aR.el.rotation.x = pc.elR;
     root.rotation.z = pc.bank; root.rotation.y = pc.yaw; root.rotation.x = pitch;
     P.head.rotation.x = pc.head;
-    veh.group.position.y = pc.bob; veh.group.rotation.z = tipZ; veh.group.position.x = tipX; veh.fork.rotation.y = dead ? 0 : -vx * .3;
-    spinWheels(veh, dt, dead ? Math.max(0, 14 - G.deadT * 14) : (G.speed || 0));
+    bikeLife(G, dt, p, dead, vx, veh);
+    if (!P.bm || P.bm === 'on' || P.bm === 'ret') {
+      const rs = P.bm === 'ret' ? clamp(G.regainT / .4, 0, 1) : 1, e1 = rs - 1, eb = 1 + 2.7 * e1 * e1 * e1 + 1.7 * e1 * e1;   // ease-out-back pop
+      veh.group.position.y = pc.bob + (1 - rs) * 2.4; veh.group.rotation.z = tipZ; veh.group.position.x = tipX; veh.group.scale.setScalar(Math.max(.01, eb)); veh.fork.rotation.y = dead ? 0 : -vx * .3;
+      spinWheels(veh, dt, dead ? Math.max(0, 14 - G.deadT * 14) : (G.speed || 0));
+      if (P.bm === 'ret' && rs >= 1) { P.bm = 'on'; veh.group.scale.setScalar(1); }
+    }
   }
 
   /* ---------------------------------------------------------------- scenery */
@@ -575,7 +617,7 @@
   const letterMats = {}, itemRes = {};
   function glyphMat(ch) {
     if (letterMats[ch]) return letterMats[ch];
-    const tex = ctex(128, 128, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#f6f0e0'; g.font = '700 ' + (ch.length > 1 ? 66 : 92) + 'px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, w / 2, h / 2 + 5); }, false);
+    const tex = ctex(128, 128, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#f6f0e0'; g.font = '700 ' + (ch.length > 2 ? 40 : ch.length > 1 ? 66 : 92) + 'px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, w / 2, h / 2 + 5); }, false);
     return (letterMats[ch] = new T.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
   }
   function buildItems() {
@@ -648,6 +690,7 @@
       for (const o of [seal, man, ck]) { o.scale.setScalar(1.3); o.visible = false; hub.add(o); v.push(o); }
       hub.add(mkHalo()); g.add(hub); g.visible = false; scene.add(g); return { root: g, hub, v };
     });
+    R_.ring.bike = new T.MeshLambertMaterial({ color: 0xe08a3c, emissive: 0x4a2208, emissiveIntensity: .9 });
     R_.ring.tletter = new T.MeshLambertMaterial({ color: 0x4f9ea3, emissive: 0x0d2a2c, emissiveIntensity: .8 });
   }
   function syncItems(G) {
@@ -655,11 +698,11 @@
     for (const it of G.items) {
       if (it.taken || it.z > 135 || it.z + (it.depth || 0) < -6) continue;
       let e = it._v;
-      if (!e) { e = it._v = acquire(it.kind === 'x2' || it.kind === 'tletter' ? 'letter' : it.kind); e.owner = it; if (it.kind === 'relic') { e.v.forEach((o, i) => { o.visible = i === it.v; }); } if (it.kind === 'letter' || it.kind === 'x2' || it.kind === 'tletter') { const ch = it.kind === 'x2' ? '×2' : it.ch; if (e.ch !== ch) { e.ch = ch; e.f.material = e.b.material = glyphMat(ch); } e.ring.material = itemRes.ring[it.kind]; } }
+      if (!e) { e = it._v = acquire(it.kind === 'x2' || it.kind === 'tletter' || it.kind === 'bike' ? 'letter' : it.kind); e.owner = it; if (it.kind === 'relic') { e.v.forEach((o, i) => { o.visible = i === it.v; }); } if (it.kind === 'letter' || it.kind === 'x2' || it.kind === 'tletter' || it.kind === 'bike') { const ch = it.kind === 'x2' ? '×2' : it.kind === 'bike' ? 'BIKE' : it.ch; if (e.ch !== ch) { e.ch = ch; e.f.material = e.b.material = glyphMat(ch); } e.ring.material = itemRes.ring[it.kind]; } }
       e.stamp = frameId; const x = (it.lane - 1) * LW;
       if (it.kind === 'key' || it.kind === 'lockbox' || it.kind === 'parcel' || it.kind === 'relic') { e.root.position.set(x, (it.y || .95) + Math.sin(G.clock * 2.4 + it.lane) * .06, -it.z); e.hub.rotation.y = G.clock * 1.5; }
       else if (it.kind === 'drop') { e.root.position.set(x, 0, -(it.z + it.depth / 2)); e.ring.rotation.z = G.clock * .6; }
-      else if (it.kind === 'letter' || it.kind === 'x2' || it.kind === 'tletter') { e.root.position.set(x, (it.y || .95) + Math.sin(G.clock * 2.4 + it.lane) * .08, -it.z); e.hub.rotation.y = Math.sin(G.clock * 1.8 + it.lane) * .5; }
+      else if (it.kind === 'letter' || it.kind === 'x2' || it.kind === 'tletter' || it.kind === 'bike') { e.root.position.set(x, (it.y || .95) + Math.sin(G.clock * 2.4 + it.lane) * .08, -it.z); e.hub.rotation.y = Math.sin(G.clock * 1.8 + it.lane) * .5; }
       else e.root.position.set(x, 0, -(it.z + (it.depth || 0) / 2));
     }
     itemRes.padTex.offset.y = -((G.clock * 1.6) % 1);
@@ -863,6 +906,7 @@
     P = buildPlayer(o.look); P.mats = null;
   };
   R.outfitHex = () => curCharKey;
+  global.__bm = () => P && P.bm;
   /* characters preview: a small studio (key + warm/cool rim lights, soft ground shadow) used for cached PNG cards and a live idle-animated hero */
   const pvCache = {};
   function shadowTex() { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 4, 64, 64, 62); gr.addColorStop(0, 'rgba(0,0,0,.62)'); gr.addColorStop(.6, 'rgba(0,0,0,.28)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); const t = new T.CanvasTexture(c); return t; }

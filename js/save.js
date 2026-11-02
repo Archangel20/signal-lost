@@ -65,7 +65,7 @@
   const fresh = () => ({
     v: 5, wallet: 0, loc: 0, locs: [0], lp: {}, up: { jam: 0, cash: 0, turbo: 0, bail: 0 }, owned: ['courier'], outfit: 'courier',
     stats: { runs: 0, time: 0, cash: 0, longest: 0, near: 0, jams: 0, bails: 0, best: 0, bestPred: 0, coins: 0, words: 0, missions: 0, dailies: 0, far: 0, bestPts: 0 },
-    daily: { d: today(), best: 0, runs: 0, done: false }, set: { music: true, sfx: true, haptics: true, voice: true }, tut: {}
+    daily: { d: today(), best: 0, runs: 0, done: false }, set: { music: true, sfx: true, haptics: true }, tut: {}
   });
   const S = { UPGRADES, OUTFITS, CHARS: OUTFITS, TIERS, LOCS, data: fresh(), today, CASH_X, compact };
   function load() {

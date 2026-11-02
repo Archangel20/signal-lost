@@ -24,7 +24,7 @@
 
   H.init = function (game, handlers) {
     G = game; H.h = handlers || {};
-    ['hud', 'loctask', 'money', 'mult', 'stars', 'predict', 'jam', 'jamtxt', 'toasts', 'hint', 'subs', 'title', 'pause', 'over', 'wtxt', 'csub', 'crows', 'lanes', 'verdict', 'tip', 'cscore', 'cnew', 'best', 'game', 'mapwrap', 'btn-retry', 'btn-start', 'minimap', 'bail', 'cwallet', 'wallet', 'word', 'missions', 'score', 'cstats', 'daily', 'quest', 'rival', 'stagebanner', 'sb-k', 'sb-n', 'sb-s', 'nowplaying', 'chip-turbo', 'chip-x2', 'chip-perk'].forEach(k => el[k] = $(k));
+    ['hud', 'loctask', 'money', 'mult', 'stars', 'predict', 'jam', 'jamtxt', 'toasts', 'hint', 'subs', 'title', 'pause', 'over', 'wtxt', 'csub', 'crows', 'lanes', 'verdict', 'tip', 'cscore', 'cnew', 'best', 'game', 'mapwrap', 'btn-retry', 'btn-start', 'minimap', 'bail', 'cwallet', 'wallet', 'word', 'missions', 'score', 'cstats', 'daily', 'quest', 'rival', 'stagebanner', 'sb-k', 'sb-n', 'sb-s', 'nowplaying', 'chip-turbo', 'chip-x2', 'chip-foot', 'chip-perk'].forEach(k => el[k] = $(k));
     el.sm = el.subs.querySelector('.msg');
     let s = '';
     for (let i = 0; i < 5; i++) s += `<path d="${STAR}" transform="translate(${i * 30} 0)"/>`;
@@ -88,7 +88,7 @@
       if (it.taken || it.z > 70 || it.z + (it.depth || 0) < -12) continue;
       const ix = X((it.lane - 1) * LW);
       if (it.kind === 'letter') { c.fillStyle = '#f0b24a'; c.beginPath(); c.arc(ix, Y(it.z), S / 36, 0, 7); c.fill(); }
-      else if (it.kind === 'x2') { c.fillStyle = '#79b95f'; c.beginPath(); c.arc(ix, Y(it.z), S / 36, 0, 7); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1; c.stroke(); }
+      else if (it.kind === 'x2' || it.kind === 'bike') { c.fillStyle = '#79b95f'; c.beginPath(); c.arc(ix, Y(it.z), S / 36, 0, 7); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1; c.stroke(); }
       else if (it.kind === 'key' || it.kind === 'tletter' || it.kind === 'relic' || it.kind === 'lockbox' || it.kind === 'parcel') { c.fillStyle = it.kind === 'parcel' ? '#e8d29a' : '#7fd0d6'; c.beginPath(); c.arc(ix, Y(it.z), S / 32, 0, 7); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1; c.stroke(); }
       else { c.fillStyle = it.kind === 'drop' ? '#7fd0d6' : it.kind === 'ramp' ? '#d99a3a' : '#e8d29a'; c.fillRect(ix - 1.05 * kx, Y(it.z + it.depth), 2.1 * kx, Math.max(3, it.depth * kz)); }
     }
@@ -228,6 +228,7 @@
       setCls('t_rivalwin', el.rival, 'win', G.rivalBeaten);
     } else setText('rival', el.rival, '');
     // chips
+    setCls('t_chf', el['chip-foot'], 'hidden', !(G.p && G.p.foot) || G.state !== 'play'); if (G.p && G.p.foot) setText('chf', el['chip-foot'], 'ON FOOT · 0:' + String(Math.max(0, Math.ceil(G.footT)) % 60).padStart(2, '0'));
     setCls('t_cht', el['chip-turbo'], 'hidden', !(G.boostT > 0)); setCls('t_chx', el['chip-x2'], 'hidden', !(G.x2T > 0));
     if (G.boostT > 0) setText('cht', el['chip-turbo'], 'Turbo ' + Math.ceil(G.boostT) + 's');
     { const pk = G.perk || {}; let t = '';

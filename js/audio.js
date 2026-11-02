@@ -1,5 +1,5 @@
 /* SIGNAL LOST — procedural WebAudio: eight ORIGINAL Afrobeats / Amapiano / Afropop tracks (no samples, no copyrighted songs),
-   clean SFX, and character voice lines (real mp3s in assets/voice/, speechSynthesis fallback) that duck the music.
+   and clean SFX. NO voice-overs. Mobile-safe: the context is created + resumed inside the tap, an iOS silent-switch unlock plays, and it re-resumes on visibility/gesture.
    Menu = calm loop. In-game = full groove; layers rise with the city's threat level (1..5). A different track every restart. */
 (function (global) {
   'use strict';
@@ -7,11 +7,11 @@
   try { const AP = global.AudioParam && global.AudioParam.prototype; if (AP && !AP.__slSafe) { const f = AP.exponentialRampToValueAtTime; AP.exponentialRampToValueAtTime = function (v, t) { return f.call(this, (v > 1e-4 ? v : 1e-4), t); }; AP.__slSafe = true; } } catch (e) {}
   const A = {
     ctx: null, enabled: true, muted: false, musicEnabled: true, sfxEnabled: true, volume: 0.85,
-    mode: 'menu', stars: 1, speedR: 0, playing: false, blind: false, timer: null, voiceEnabled: true
+    mode: 'menu', stars: 1, speedR: 0, playing: false, blind: false, timer: null
   };
   try { A.muted = localStorage.getItem('sl_muted') === '1'; } catch (e) {}
   let E = null; // active engine (live, or an offline one while rendering)
-  const MUSV = 0.21;
+  const MUSV = 0.28;   // music bus level (raised: phone speakers need a loud, mid-heavy mix)
   const mf = n => 440 * Math.pow(2, (n - 69) / 12);
   const now = () => (E.t0 !== undefined ? E.t0 : E.c.currentTime);
 
@@ -24,15 +24,15 @@
     const comp = c.createDynamicsCompressor(); comp.threshold.value = -18; comp.knee.value = 14; comp.ratio.value = 4; comp.attack.value = 0.006; comp.release.value = 0.18;
     const lim = c.createDynamicsCompressor(); lim.threshold.value = -4; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.001; lim.release.value = 0.08;
     e.master.connect(comp); comp.connect(lim); lim.connect(c.destination);
+    if (c.createAnalyser) { e.an = c.createAnalyser(); e.an.fftSize = 2048; lim.connect(e.an); }   // output-level tap (A.level)
     e.sfxBus = G(A.sfxEnabled ? 0.9 : 0, e.master);
     // music chain: musBus -> (dry | radio-filter) -> lowpass -> musOut -> master
     e.musOut = G(A.musicEnabled ? 1 : 0, e.master);
     e.musLP = F('lowpass', 16000, 0.5, e.musOut);
     e.dry = G(1, e.musLP);
     e.radio = F('bandpass', 1400, 0.7); e.wet = G(0, e.musLP); e.radio.connect(e.wet);
-    e.duckG = G(1); e.duckG.connect(e.dry); e.duckG.connect(e.radio);   // voice-over ducking lives here, apart from SFX ducks
+    e.duckG = G(1); e.duckG.connect(e.dry); e.duckG.connect(e.radio);
     e.musBus = G(MUSV, e.duckG);
-    e.voiceBus = G(1.25, e.master);
     e.drumBus = G(1, e.musBus); e.padBus = G(1, e.musBus); e.leadBus = G(1, e.musBus);
     // 808 bus: soft saturation adds harmonics so the sub is audible on phone speakers
     const ws = c.createWaveShaper(), cur = new Float32Array(1025);
@@ -105,6 +105,8 @@
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.62 * v, t + 0.006);
     g.gain.setValueAtTime(0.62 * v, t + Math.max(0.01, dur - 0.09)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.04);
     o.connect(g); g.connect(E.bassBus); o.start(t); o.stop(t + dur + 0.06);
+    tone(f * 2, Math.min(dur, 0.3), 'triangle', 0.3 * v, { t, bus: E.bassBus, atk: 0.006 });          // 2nd harmonic: small speakers can hear it
+    tone(f * 3, 0.12, 'sine', 0.12 * v, { t, bus: E.bassBus });
   }
   function pad(t, notes, dur, cutoff, v) {
     const c = E.c, lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.6;
@@ -147,12 +149,12 @@
   function guitar(t, midi, v) {                  // highlife-style palm-muted plucked guitar
     const c = E.c, lp = c.createBiquadFilter(), g = c.createGain(); lp.type = 'lowpass'; lp.Q.value = 1.2;
     lp.frequency.setValueAtTime(3400, t); lp.frequency.exponentialRampToValueAtTime(600, t + 0.18);
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.13 * v, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.2 * v, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
     lp.connect(g); g.connect(E.leadBus); const s = c.createGain(); s.gain.value = 0.3; g.connect(s); s.connect(E.send);
     for (const d of [-5, 5]) { const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mf(midi); o.detune.value = d; o.connect(lp); o.start(t); o.stop(t + 0.26); }
   }
   function marimba(t, midi, dur, v) {
-    tone(mf(midi), Math.min(0.5, dur), 'sine', 0.22 * v, { t, bus: E.leadBus, send: 0.35, atk: 0.003 });
+    tone(mf(midi), Math.min(0.5, dur), 'sine', 0.3 * v, { t, bus: E.leadBus, send: 0.35, atk: 0.003 });
     tone(mf(midi) * 4, 0.07, 'sine', 0.09 * v, { t, bus: E.leadBus }); tone(mf(midi) * 10, 0.025, 'sine', 0.025 * v, { t, bus: E.leadBus });
   }
   function whistle(t, midi, dur, v) {
@@ -163,7 +165,17 @@
     o.start(t); lfo.start(t); o.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05);
   }
   function keys(t, notes, dur, v) {              // soft electric-piano stab: sine + tine, decays naturally
-    notes.forEach((n, i) => { const f = mf(n); tone(f, dur, 'sine', 0.085 * v, { t: t + i * 0.006, bus: E.padBus, send: 0.3, atk: 0.006 }); tone(f * 2, dur * 0.4, 'triangle', 0.025 * v, { t, bus: E.padBus }); });
+    notes.forEach((n, i) => { const f = mf(n); tone(f, dur, 'sine', 0.13 * v, { t: t + i * 0.006, bus: E.padBus, send: 0.3, atk: 0.006 }); tone(f * 2, dur * 0.5, 'triangle', 0.05 * v, { t, bus: E.padBus }); });
+  }
+
+  function lead(t, midi, dur, v) {                // soft synth lead: detuned saw + triangle, vibrato, echo (the hook)
+    const c = E.c, f = mf(midi), lp = c.createBiquadFilter(), g = c.createGain(), lfo = c.createOscillator(), lg = c.createGain();
+    lp.type = 'lowpass'; lp.Q.value = 1; lp.frequency.setValueAtTime(900, t); lp.frequency.exponentialRampToValueAtTime(3200, t + 0.08); lp.frequency.exponentialRampToValueAtTime(1500, t + dur);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.15 * v, t + 0.015); g.gain.setValueAtTime(0.12 * v, t + Math.max(0.03, dur * 0.7)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.05);
+    lfo.frequency.value = 5.2; lg.gain.value = f * 0.007; lfo.connect(lg);
+    lp.connect(g); g.connect(E.leadBus); const s = c.createGain(); s.gain.value = 0.45; g.connect(s); s.connect(E.send);
+    for (const [ty, d] of [['sawtooth', -7], ['sawtooth', 7], ['triangle', 0]]) { const o = c.createOscillator(); o.type = ty; o.frequency.value = f; o.detune.value = d; lg.connect(o.frequency); o.connect(lp); o.start(t); o.stop(t + dur + 0.08); }
+    lfo.start(t); lfo.stop(t + dur + 0.08);
   }
 
   /* ------------------------------------------------------------ the tracks: all original, generated live, no samples */
@@ -227,14 +239,14 @@
   function scheduleStep(e) {
     const T = A.track, ST = STYLES[T.style], t0 = e.nextT, s = e.step, st = s & 15, bar = (s >> 4) & 3;
     if (st === 0) e.tier = e.pendTier;
-    const menu = e.mode === 'menu', tier = menu ? 0 : e.tier, last = bar === 3, ti = Math.max(1, tier);
+    const menu = e.mode === 'menu', tier = menu ? 0 : Math.max(2, e.tier), last = bar === 3, ti = Math.max(1, tier);
     const base = menu ? T.bpm * 0.9 : T.bpm + A.speedR * 5 + (tier >= 5 ? 3 : 0);
     e.tempo += (base - e.tempo) * 0.25;
     const sp = 60 / e.tempo / 4, t = t0 + (st & 1 ? ST.swing * sp : 0);
     e.dly.delayTime.value = sp * 3;
     const ch = T.prog[bar], notes = CH[ch[1]].map(n => ch[0] + n), root = ch[0] - 24;
     // chords: warm pad that opens up with intensity
-    if (st === 0) pad(t0, notes, sp * 16, menu ? 1000 : [900, 900, 1100, 1400, 1700, 2000][tier], menu ? 0.07 : 0.055);
+    if (st === 0) pad(t0, notes, sp * 16, menu ? 1100 : [1100, 1100, 1400, 1700, 2000, 2400][tier], menu ? 0.1 : 0.085);
     // drums
     const kp = ST.kick[ti]; if (!menu && kp.indexOf(st) >= 0) kick(t0, 0.82); else if (menu && st === 0) kick(t0, 0.5);
     if (last && tier >= 3 && st === 15) kick(t0, 0.6);
@@ -256,15 +268,19 @@
     }
     // rhythm instrument: keys stabs (amapiano) / guitar (afrobeats, afropop)
     if (T.style === 'amapiano') { if (tier >= 2 && ST.keys.indexOf(st) >= 0 && !(tier < 4 && st === 14)) keys(t, notes.slice(0, 4), sp * 3.2, 1.2); }
-    else if ((T.style === 'afrobeats' && tier >= 3) || (T.style === 'afropop' && tier >= 2)) {
+    else if (T.style === 'afrobeats' || T.style === 'afropop') {
+      if (tier >= 2 && [3, 6, 10, 14].indexOf(st) >= 0 && !(tier < 4 && st === 14)) keys(t, notes.slice(0, 4), sp * 2.4, 1.0);   // offbeat chord skank
+    }
+    if ((T.style === 'afrobeats' && tier >= 2) || (T.style === 'afropop' && tier >= 2)) {
       const gi = ST.guitar.indexOf(st); if (gi >= 0) guitar(t, notes[[0, 2, 1, 3, 2, 1, 3, 2][gi % 8] % 4] + 12 + (gi % 3 === 2 ? 12 : 0), 0.8);
     }
     // melody (marimba, with a whistle on top for the amapiano tracks at full intensity)
-    if (menu || tier >= 4 || (T.style === 'afropop' && tier >= 3)) {
+    if (menu || tier >= 2) {
       const L = T.mel[bar];
       for (let i = 0; i < L.length; i++) if (L[i][0] === st && (!menu || i % 2 === 0)) {
         const m = pent(T.mroot, T.scale, L[i][1]);
-        marimba(t, m, L[i][2] * sp, menu ? 0.6 : 0.85);
+        marimba(t, m, L[i][2] * sp, menu ? 0.7 : 0.95);
+        if (!menu && tier >= 3) lead(t, m, Math.max(0.12, L[i][2] * sp * 0.95), 0.8 + (tier >= 4 ? 0.2 : 0));
         if (tier >= 5 && T.style === 'amapiano' && (bar & 1)) whistle(t, m + 12, L[i][2] * sp * 1.2, 0.8);
       }
     }
@@ -278,12 +294,55 @@
   }
 
   /* ------------------------------------------------------------ public control */
+  /* iOS keeps WebAudio silent while the ringer switch is on silent, unless a media (<audio>) element is playing: loop a silent clip, started inside a tap. */
+  const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  let silentEl = null;
+  function silentWav() {
+    const sr = 8000, n = 4000, b = new Uint8Array(44 + n), v = new DataView(b.buffer), w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, sr, true); v.setUint32(28, sr, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); w(36, 'data'); v.setUint32(40, n, true);
+    for (let i = 0; i < n; i++) b[44 + i] = 128;
+    return URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
+  }
+  function silentPlay() {
+    try {
+      if (!silentEl) { silentEl = new Audio(); silentEl.src = silentWav(); silentEl.loop = true; silentEl.preload = 'auto'; silentEl.setAttribute('playsinline', ''); silentEl.setAttribute('x-webkit-airplay', 'deny'); }
+      if (silentEl.paused) { const p = silentEl.play(); if (p && p.catch) p.catch(() => {}); }
+      A.silentPlaying = !silentEl.paused;
+    } catch (e) {}
+  }
+  function audioSessionPlayback() { try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {} }
+  A.resume = function () {                          // call from ANY user gesture (touchend / click / key): safe to spam
+    audioSessionPlayback();
+    if (!A.ctx) return;
+    if (IOS || A.forceUnlockEl) silentPlay();
+    if (A.ctx.state !== 'running') { try { const p = A.ctx.resume(); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+    try { const b = A.ctx.createBuffer(1, 1, 22050), s = A.ctx.createBufferSource(); s.buffer = b; s.connect(A.ctx.destination); s.start(0); } catch (e) {}   // tiny silent blip: fully unlocks iOS
+  };
   A.init = function () {
-    if (A.ctx) { if (A.ctx.state === 'suspended') A.ctx.resume(); return; }
+    audioSessionPlayback();
+    if (A.ctx) { A.resume(); return; }
     const AC = global.AudioContext || global.webkitAudioContext;
     if (!AC) { A.enabled = false; return; }
-    try { A.ctx = new AC(); } catch (e) { A.enabled = false; return; }
+    try { A.ctx = new AC({ latencyHint: 'interactive' }); } catch (e) { try { A.ctx = new AC(); } catch (e2) { A.enabled = false; return; } }
     E = makeEngine(A.ctx);
+    A.ctx.onstatechange = () => { A.state = A.ctx.state; };
+    A.resume();                                     // resume + unlock synchronously, inside the tap that created us
+  };
+  // re-resume on every gesture until the context is genuinely running, and whenever the tab/app comes back
+  ['touchend', 'pointerup', 'click', 'keydown', 'mousedown'].forEach(ev => document.addEventListener(ev, () => { if (A.ctx && (A.ctx.state !== 'running' || (IOS && silentEl && silentEl.paused))) A.resume(); }, { capture: true, passive: true }));
+  document.addEventListener('visibilitychange', () => {
+    if (!A.ctx) return;
+    if (document.hidden) { try { A.ctx.suspend(); } catch (e) {} try { if (silentEl) silentEl.pause(); } catch (e) {} }
+    else { A.resume(); if (A.playing && E) E.nextT = Math.max(E.nextT, A.ctx.currentTime + 0.05); }
+  });
+  global.addEventListener('pageshow', () => { if (A.ctx && !document.hidden) A.resume(); });
+  global.addEventListener('focus', () => { if (A.ctx && !document.hidden) A.resume(); });
+  /* output level (post-limiter): RMS + peak of the last ~46 ms, for tests and a debug meter */
+  A.level = function () {
+    if (!E || !E.an) return null; const d = new Float32Array(E.an.fftSize); E.an.getFloatTimeDomainData(d);
+    let s = 0, pk = 0; for (let i = 0; i < d.length; i++) { s += d[i] * d[i]; const a = Math.abs(d[i]); if (a > pk) pk = a; }
+    return { rms: Math.sqrt(s / d.length), peak: pk, state: A.ctx ? A.ctx.state : 'none', muted: A.muted, track: A.trackName, mode: A.mode, playing: A.playing };
   };
   A.startMusic = function () {
     if (!E || A.playing) return;
@@ -317,9 +376,10 @@
     if (!b) E.radio.frequency.setValueAtTime(1400, t + 0.5);
   };
   A.duck = function (amt, secs) {
-    if (!E) return; const t = E.c.currentTime, g = E.musBus.gain;
+    if (!E) return; amt = amt === undefined ? 0.5 : amt; secs = secs === undefined ? 0.6 : secs; const t = E.c.currentTime, g = E.musBus.gain;
     g.cancelScheduledValues(t); g.setValueAtTime(MUSV * (1 - amt), t); g.linearRampToValueAtTime(MUSV, t + secs);
   };
+  A.pauseDuck = function (on) { if (!E) return; E.duckG.gain.setTargetAtTime(on ? 0.4 : 1, E.c.currentTime, 0.08); };   // pause overlay: music keeps playing, quieter
   A.setMuted = function (m) {
     A.muted = !!m; try { localStorage.setItem('sl_muted', A.muted ? '1' : '0'); } catch (e) {}
     if (E) E.master.gain.setTargetAtTime(A.muted ? 0 : A.volume, E.c.currentTime, 0.04);
@@ -359,6 +419,8 @@
   A.uiBlip = S(function () { tone(720, 0.05, 'sine', 0.07, { slide: 900 }); });
   A.buy = S(function () { [1046.5, 1568].forEach((f, i) => tone(f, 0.4, 'sine', 0.11, { delay: i * 0.09, send: 0.25 })); noise(0.05, 0.06, { f: 6000, type: 'highpass', delay: 0.01 }); });
   A.deny = S(function () { tone(180, 0.12, 'sine', 0.14, { slide: 120 }); });
+  A.bikeLost = S(function () { noise(0.7, 0.4, { f: 3500, fTo: 200, type: 'lowpass', q: 0.9 }); tone(130, 0.5, 'sawtooth', 0.28, { slide: 45 }); noise(0.5, 0.18, { f: 6000, fTo: 1800, type: 'highpass', q: 0.8, delay: 0.1 }); [0.2, 0.34, 0.46].forEach((d, i) => tone(900 - i * 150, 0.1, 'triangle', 0.08, { delay: d })); });
+  A.bikeBack = S(function () { tone(110, 0.5, 'sawtooth', 0.2, { slide: 330 }); noise(0.4, 0.1, { f: 800, fTo: 3000, type: 'bandpass', q: 1.2 }); [523, 659, 784].forEach((f, i) => tone(f, 0.3, 'triangle', 0.1, { delay: 0.12 + i * 0.07, send: 0.3 })); });
   A.bail = S(function () { noise(0.55, 0.25, { f: 4000, fTo: 250, type: 'lowpass', q: 0.8 }); tone(180, 0.4, 'sine', 0.35, { slide: 60 }); [523, 784, 1047].forEach((f, i) => tone(f, 0.45, 'sine', 0.08, { delay: 0.25 + i * 0.08, send: 0.3 })); });
   A.start = S(function () {
     const t = now(); bass(t, 33, 0.7, 0.9); noise(0.38, 0.1, { f: 300, fTo: 4200, q: 1.1, atk: 0.2 });
@@ -375,76 +437,8 @@
   });
 
 
-  /* ------------------------------------------------------------ character voice-overs */
-  const VOICE_TEXT = {
-    st01: "Welcome to Lagos Island! Let's go!", st02: 'Third Mainland Bridge! Beautiful view. Keep it moving!', st03: 'Lekki toll, night shift! Stay sharp!',
-    st04: 'Ikeja Market! Watch the crowd, and grab that cash!', st05: 'Abuja Boulevard! Smooth roads, fast courier!', st06: 'Harbour docks! Dodge those containers!',
-    st07: 'Desert highway! Hot road, cool courier!', st08: 'Rainy industrial zone! Keep your grip!', st09: 'Savanna sunset! Beautiful. Now run!',
-    st10: 'Victoria Island, midnight! The city is yours!', start: "Back on the road! Let's go, courier!", mission1: 'Mission complete! Nice one!',
-    mission2: 'Another one done! You are a legend!', word1: 'You spelled it! Big bonus!', word2: 'Word complete! Cash for you!', daily: 'Daily challenge complete! Well done!',
-    best: 'New personal best! Congratulations!', crash: 'Ah ah! Try again, you can do it!', rival: 'You beat the rival! Sweet!', ramp: 'Fly, courier!', boost: 'Turbo! Hold on tight!'
-  };
-  Object.assign(VOICE_TEXT, {"c_courier_s": "Tunde on dispatch! Let's make that money!", "c_courier_g": "Easy! Keep it moving, boss!", "c_danfo_s": "Bisi, Danfo! Enter, enter! We dey go!", "c_danfo_g": "Who has change? I have change!", "c_sparks_s": "Chidi, Sparks! I can fix anything. Even this signal!", "c_sparks_g": "No wahala, I got this one!", "c_ankara_s": "Amaka, Ankara! Fresh from Balogun. Make we go!", "c_ankara_g": "Look at those letters! Come to mama!", "c_bolt_s": "Lagos Bolt on the track! Catch me if you can!", "c_bolt_g": "Is that all you got? I am just warming up!", "c_sultan_s": "Salaam! Alhaji Musa is on the road. Calm and steady!", "c_sultan_g": "Slowly, slowly. We still get there first!", "c_agbero_s": "Agbero Boss in the building! Everybody make way!", "c_agbero_g": "Una dey try! But nobody touches me!", "c_okada_s": "Ayo, Okada! Hold tight, we are flying!", "c_okada_g": "Who needs a road? I make my own!", "c_shadow_s": "They never see me coming. Let's go!", "c_shadow_g": "Quiet, quiet. The shadows are mine!", "c_scholar_s": "Professor Adaeze is in session. Class, let's spell!", "c_scholar_g": "Knowledge is power. And cash too!"});   // per-character lines
-  const vbuf = {}, vload = {}, VBASE = 'assets/voice/';
-  let vcur = null, vseq = 0, vlast = {}, vfail = false;
-  function loadVoice(id) {
-    if (vbuf[id]) return Promise.resolve(vbuf[id]);
-    if (vload[id]) return vload[id];
-    if (vfail || !A.ctx) return Promise.resolve(null);
-    return (vload[id] = fetch(VBASE + id + '.mp3').then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
-      .then(ab => new Promise((res, rej) => A.ctx.decodeAudioData(ab, res, rej))).then(b => (vbuf[id] = b))
-      .catch(() => { delete vload[id]; vfail = true; return null; }));
-  }
-  A.preloadVoice = function (only) {
-    const ids = only || Object.keys(VOICE_TEXT).filter(k => k.slice(0, 2) !== 'c_'); let i = 0;
-    const next = () => { if (i >= ids.length || vfail) return; loadVoice(ids[i++]).then(() => setTimeout(next, 60)); };
-    next();
-  };
-  function duckFor(secs) {                       // dip the music while someone is talking
-    if (!E) return; const g = E.duckG.gain, t = E.c.currentTime;
-    g.cancelScheduledValues(t); g.setTargetAtTime(0.34, t, 0.06); g.setTargetAtTime(1, t + secs + 0.15, 0.3);
-  }
-  function unduck() { if (!E) return; const g = E.duckG.gain, t = E.c.currentTime; g.cancelScheduledValues(t); g.setTargetAtTime(1, t, 0.25); }
-  function speakFallback(id, seq) {
-    const ss = global.speechSynthesis; if (!ss || !global.SpeechSynthesisUtterance || !VOICE_TEXT[id]) return false;
-    try {
-      const u = new SpeechSynthesisUtterance(VOICE_TEXT[id]); u.pitch = 1.4; u.rate = 1.12; u.volume = 1; u.lang = 'en-NG';
-      const vs = ss.getVoices ? ss.getVoices() : [];
-      const v = vs.find(x => /en[-_]NG/i.test(x.lang)) || vs.find(x => /en[-_](GB|ZA|IN)/i.test(x.lang) && /female|zira|samantha|hazel|susan|libby|sonia/i.test(x.name)) || vs.find(x => /^en/i.test(x.lang));
-      if (v) u.voice = v;
-      u.onstart = () => duckFor(2.5);
-      u.onend = u.onerror = () => { if (vcur && vcur.seq === seq) { vcur = null; unduck(); } };
-      ss.cancel(); ss.speak(u); vcur = { prio: vcur ? vcur.prio : 1, seq, speech: true, end: performance.now() + 4000 };
-      return true;
-    } catch (e) { return false; }
-  }
-  A.setVoiceEnabled = function (on) { A.voiceEnabled = !!on; if (!on) A.stopVoice(); };
-  A.stopVoice = function () {
-    if (vcur) { try { if (vcur.src) vcur.src.stop(); } catch (e) {} if (vcur.speech) try { global.speechSynthesis.cancel(); } catch (e) {} vcur = null; unduck(); }
-  };
-  /* say(id, priority): stage lines outrank pickups; a lower-priority line never talks over a higher one; per-id cooldown stops spam */
-  A.say = function (id, prio, cooldown) {
-    if (!A.voiceEnabled || A.muted || !E || !A.ctx || E.t0 !== undefined) return false;
-    prio = prio || 1; const nowMs = performance.now();
-    if (cooldown && vlast[id] && nowMs - vlast[id] < cooldown * 1000) return false;
-    if (vcur && vcur.end > nowMs && vcur.prio >= prio) return false;
-    if (vcur) A.stopVoice();
-    vlast[id] = nowMs; const seq = ++vseq; vcur = { prio, seq, end: nowMs + 4000 };
-    const buf = vbuf[id];
-    const play = b => {
-      if (!vcur || vcur.seq !== seq) return;
-      if (!b) { if (!speakFallback(id, seq)) vcur = null; else vcur.prio = prio; return; }
-      const c = E.c, src = c.createBufferSource(); src.buffer = b; src.connect(E.voiceBus); src.start(c.currentTime + 0.02);
-      vcur.src = src; vcur.end = nowMs + b.duration * 1000 + 100; duckFor(b.duration);
-      src.onended = () => { if (vcur && vcur.seq === seq) vcur = null; };
-    };
-    if (buf) play(buf); else loadVoice(id).then(play);
-    return true;
-  };
-  A.voiceBusy = () => !!(vcur && vcur.end > performance.now());
-
   /* ------------------------------------------------------------ SFX for the new road features */
-  A.stage = S(function () { // stage change: a rising sweep + warm chime, under the voice line
+  A.stage = S(function () { // stage change: a rising sweep + warm chime, 
     noise(0.9, 0.1, { f: 400, fTo: 5000, q: 1, atk: 0.4, send: 0.3 });
     [523.3, 659.3, 784, 1046.5].forEach((f, i) => tone(f, 0.55, 'sine', 0.08, { delay: 0.1 + i * 0.09, send: 0.35 }));
   });

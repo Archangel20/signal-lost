@@ -7,7 +7,7 @@
   G.hint = !(Save.data.tut && Save.data.tut.done);
   function syncUp() { G.up = Object.assign({ jam: 0, cash: 0, turbo: 0, bail: 0 }, Save.data.up); G.perk = Save.perk(); G.loc = Save.data.loc | 0; if (G.state === 'title' || G.attract) G.stage = G.loc; }
   function syncOutfit() { if (glOK) { try { Render.setOutfit(Save.OUTFITS[Save.data.outfit] || Save.OUTFITS.courier); } catch (e) { console.warn('outfit', e); } } }
-  function syncAudioSettings() { const s = Save.data.set; Sfx.setMusicEnabled(s.music); Sfx.setSfxEnabled(s.sfx); if (Sfx.setVoiceEnabled) Sfx.setVoiceEnabled(s.voice !== false); }
+  function syncAudioSettings() { const s = Save.data.set; Sfx.setMusicEnabled(s.music); Sfx.setSfxEnabled(s.sfx); }
   syncUp();
 
   /* ---------- sizing (full-resolution, devicePixelRatio aware; no low-res buffer) ---------- */
@@ -28,19 +28,17 @@
 
   /* ---------- audio ---------- */
   function wake() {
-    if (!audioOn) { audioOn = true; try { Sfx.init(); syncAudioSettings(); Sfx.startMusic(); Sfx.preloadVoice && Sfx.preloadVoice(); } catch (e) { console.warn('audio', e); } }
-    else if (Sfx.ctx && Sfx.ctx.state === 'suspended') Sfx.ctx.resume();
+    if (!audioOn) { audioOn = true; try { Sfx.init(); syncAudioSettings(); Sfx.startMusic(); } catch (e) { console.warn('audio', e); } }
+    else Sfx.resume();
   }
-  function say(id, prio, cd) { try { if (Sfx.say) Sfx.say(id, prio || 1, cd === undefined ? 0 : cd); } catch (e) {} }
   function drain() {
     const ev = G.events; if (!ev.length) return;
     for (const e of ev) {
-      if (e.type === 'crash' && !G.god && !G.attract && audioOn) setTimeout(() => say(G.newBestPts ? 'best' : 'crash', 6, 0), 900);
       if (e.type === 'crash' && !G.god && !G.attract && !G.runSaved) { // bank the run (always, even if audio is off)
         G.runSaved = true; G.bankedRun = G.finalScore || 0;
         Save.recordRun({ score: G.finalScore || 0, time: G.time, near: G.nearCount, jams: G.jams, bails: G.bails, pts: G.finalPts, coins: G.coins, words: G.wordsDone, missions: G.missionsDone, dist: G.dist });
       }
-      if ((e.type === 'crash' || e.type === 'bail') && !G.god && Save.data.set.haptics && navigator.vibrate) { try { navigator.vibrate(e.type === 'crash' ? [60, 40, 140] : 45); } catch (_) {} }
+      if ((e.type === 'crash' || e.type === 'bail' || e.type === 'bikelost') && !G.god && Save.data.set.haptics && navigator.vibrate) { try { navigator.vibrate(e.type === 'crash' || e.type === 'bikelost' ? [60, 40, 140] : 45); } catch (_) {} }
       if (!audioOn) continue;
       try {
         switch (e.type) {
@@ -54,24 +52,26 @@
           case 'bump': case 'edge': Sfx.bump(); break;
           case 'crash': Sfx.crash(); break;
           case 'bail': Sfx.bail(); break;
+          case 'bikelost': Sfx.bikeLost(); Sfx.duck(0.6, 0.8); break;
+          case 'bikeback': Sfx.bikeBack(); break;
           case 'chip': Sfx.glitch(); Sfx.duck(); break;
           case 'blindEnd': Sfx.glitchEnd(); break;
           case 'speedup': Sfx.speedup(); break;
           case 'taunt': Sfx.taunt(); break;
           case 'predHit': Sfx.threat && Sfx.threat(); break;
-          case 'stage': if (!G.attract) { Sfx.stage(); say(STAGES[e.idx % STAGES.length].id, 3, 0); } break;
-          case 'mission': Sfx.mission(); say(e.n % 2 ? 'mission1' : 'mission2', 2, 4); break;
+          case 'stage': if (!G.attract) { Sfx.stage(); } break;
+          case 'mission': Sfx.mission();  break;
           case 'letter': Sfx.letter(e.i); break;
-          case 'word': Sfx.word(); say(e.n % 2 ? 'word1' : 'word2', 4, 4); break;
-          case 'daily': Sfx.daily(); say('daily', 5, 4); break;
-          case 'rival': say('rival', 2, 8); break;
-          case 'ramp': Sfx.ramp(); say('ramp', 1, 14); break;
-          case 'wheelie': Sfx.boost(); say('boost', 3, 6); break;
+          case 'word': Sfx.word();  break;
+          case 'daily': Sfx.daily(); break;
+          case 'rival': break;
+          case 'ramp': Sfx.ramp(); break;
+          case 'wheelie': Sfx.boost(); break;
           case 'cloak': Sfx.glitchEnd(); break;
-          case 'boost': Sfx.boost(); say('boost', 1, 14); break;
+          case 'boost': Sfx.boost(); break;
           case 'x2': Sfx.x2(); break;
           case 'task': Sfx.letter(3); break;
-          case 'taskdone': Sfx.mission(); say('mission1', 3, 4); break;
+          case 'taskdone': Sfx.mission(); break;
           case 'parcel': Sfx.x2(); break;
         }
       } catch (err) { /* never let audio kill the loop */ }
@@ -83,13 +83,13 @@
   function startGame() {
     wake(); syncUp(); G.reset(false); G.runSaved = false; G.bankedRun = 0; lastStars = 0; paused = false; G.paused = false; startedAt = performance.now();
     try { Sfx.start(); } catch (e) {}
-    try { const nm = Sfx.nextTrack ? Sfx.nextTrack() : ''; if (nm) HUD.nowPlaying(nm); if (audioOn) { Sfx.startMusic(); const cid = Save.data.outfit; if (Sfx.preloadVoice) Sfx.preloadVoice(['c_' + cid + '_s', 'c_' + cid + '_g']); setTimeout(() => { if (G.state === 'play' && !G.attract && G.time < 12) say('c_' + cid + '_s', 4, 0); }, 3300); } } catch (e) {}
+    try { const nm = Sfx.nextTrack ? Sfx.nextTrack() : ''; if (nm) HUD.nowPlaying(nm); if (audioOn) { Sfx.startMusic(); } } catch (e) {}
   }
   function setPaused(p) {
     if (p === paused) return;
     if (p && !(G.state === 'play' && !G.attract)) return;
     paused = p; G.paused = p;
-    try { if (audioOn) { if (p) Sfx.stopMusic(); else Sfx.startMusic(); } } catch (e) {}
+    try { if (audioOn) { Sfx.startMusic(); Sfx.pauseDuck(p); } } catch (e) {}
   }
   function retry() { if (G.state === 'over' && G.overT > 0.7) { G.hint = false; startGame(); } }
   function press() { // generic "start / retry / resume" action
@@ -158,6 +158,7 @@
   document.getElementById('btn-mute').addEventListener('click', e => { e.stopPropagation(); wake(); toggleMute(); e.currentTarget.blur(); });
   document.getElementById('btn-full').addEventListener('click', e => { e.stopPropagation(); toggleFull(); e.currentTarget.blur(); });
   document.addEventListener('fullscreenchange', () => setTimeout(resize, 60));
+  document.addEventListener('touchend', () => wake(), { capture: true, passive: true });   // iOS only unlocks audio from touchend / click
   document.addEventListener('visibilitychange', () => { if (document.hidden) setPaused(true); });
   window.addEventListener('blur', () => setPaused(true));
   syncMute();
@@ -201,7 +202,7 @@
     draw(dt) { Render.frame(G, dt || 1 / 60); HUD.update(dt || 1 / 60, paused); },
     start(opts) { wake(); syncUp(); G.runSaved = false; G.reset(false, opts || {}); paused = false; G.paused = false; G.hint = false; },
     sim(secs, opts) { frozen = true; G.reset(false, Object.assign({ god: true, noflash: true }, opts)); G.hint = false; const n = Math.round(secs / DT); for (let i = 0; i < n; i++) { G.step(DT); G.events.length = 0; } frozen = false; return { time: G.time, score: Math.floor(G.score), pred: G.brain.predPct(), godHits: G.godHits || 0, waves: G.waveLog.length }; },
-    state() { const p = G.p; return { state: G.state, lane: p.lane, y: p.y, slide: p.slide, grounded: p.grounded, score: Math.floor(G.score), time: G.time, coins: G.coins, threat: G.threat, pred: G.brain.predPct(), blind: G.blindT, mult: G.mult, combo: G.combo, paused, W, H, stats: glOK ? Render.stats() : null }; },
+    state() { const p = G.p; return { state: G.state, lane: p.lane, y: p.y, slide: p.slide, grounded: p.grounded, score: Math.floor(G.score), time: G.time, coins: G.coins, threat: G.threat, foot: !!p.foot, footT: G.footT, bm: (window.__bm && window.__bm()) || null, inv: p.inv, items: (G.items||[]).map(i=>i.kind), pred: G.brain.predPct(), blind: G.blindT, mult: G.mult, combo: G.combo, paused, W, H, stats: glOK ? Render.stats() : null }; },
     pause: setPaused,
     loc(i) { Save.data.loc = i; if (Save.data.locs.indexOf(i) < 0) Save.data.locs.push(i); syncUp(); }
   };

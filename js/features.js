@@ -93,6 +93,7 @@
     if (g.attract && !g.featAttract) return;
     const others = free.filter(l => l !== fl);
     const alive = k => g.items.some(i => i.kind === k && !i.taken && i.z > 0);
+    if (g.p && g.p.foot && g.time >= g.bikeAt && !alive('bike')) { g.bikeAt = g.time + 99; g.items.push({ kind: 'bike', lane: others.length ? pick(others) : fl, z: z + (others.length ? 6 : 15), y: 0.95, taken: false }); }   // the rare BIKE pickup (only while on foot)
     if (g.tk && g.tkSpawn(wave, z, free, fl, others, alive)) return;
     // 1) the next letter of the word
     if (g.time >= g.nextLetterAt && !alive('letter')) {
@@ -122,7 +123,6 @@
 
 
   /* ---------------------------------------------------------------- location unlock task (belongs to the NEXT location; progress lives in Save) */
-  const TASK_VOICE = {};
   G.tkInit = function (opts) {
     const g = this; g.tk = null;
     if (g.attract || !global.Save) return;
@@ -273,7 +273,9 @@
     for (const it of g.items) {
       if (it.taken) continue;
       const ax = Math.abs(p.x - it.lane);
-      if (it.kind === 'letter' || it.kind === 'x2') {
+      if (it.kind === 'bike') {
+        if (Math.abs(it.z) < 1.2 && ax < 0.8 && Math.abs(it.y - (p.y + 0.55)) < 1.3 && !p.dead) { it.taken = true; g.regainBike('pickup'); }
+      } else if (it.kind === 'letter' || it.kind === 'x2') {
         if (Math.abs(it.z) < 1.1 && ax < 0.72 && Math.abs(it.y - (p.y + 0.55)) < 1.15 && !p.dead) {
           if (it.kind === 'letter') g.collectLetter(it);
           else {
@@ -286,12 +288,12 @@
       } else if (it.kind === 'drop') {
         if (g.tk && g.tk.carry && it.z <= 0.9 && it.z + it.depth >= -0.2 && ax < 0.8 && p.y < 1.4 && !p.dead) { it.taken = true; g.tkDeliver(); }
       } else if (it.kind === 'pad') {
-        if (!it.used && it.z <= 0.7 && it.z + it.depth >= -0.2 && ax < 0.62 && p.y < 0.5 && !p.dead) {
+        if (!p.foot && !it.used && it.z <= 0.7 && it.z + it.depth >= -0.2 && ax < 0.62 && p.y < 0.5 && !p.dead) {
           it.used = true; g.boostT = g.boostMax = 3.0 + 1.0 * (g.up.turbo || 0) + (g.perk.turbo || 0); g.padCount++; g.mEvent('pad'); g.addCombo(1);
           g.pop('TURBO', g.W2 || 160, 66, '#f0b24a', 1.3, 1.2); g.fx.speedPulse = 1; g.fx.zoom = 0.8; g.emit('boost');
         }
       } else if (it.kind === 'ramp') {
-        if (!it.used && it.z <= 0.45 && it.z + it.depth >= 0 && ax < 0.62 && p.y < 0.6 && !p.dead) {
+        if (!p.foot && !it.used && it.z <= 0.45 && it.z + it.depth >= 0 && ax < 0.62 && p.y < 0.6 && !p.dead) {
           it.used = true; g.rampCount++; g.mEvent('ramp');
           p.vy = g.JUMP_V * 1.55; p.y = 0.02; p.grounded = false; p.fast = false; p.jumpStart = g.clock; p.slide = 0; p.slideBuf = 0; g.rampAir = true;
           g.shake(0.8); g.fx.zoom = 0.7; g.emit('ramp');

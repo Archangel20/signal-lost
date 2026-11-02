@@ -43,8 +43,9 @@
     g.bailUsed = false; g.autoUsed = false; g.bails = 0; g.jams = 0; g.jamTotal = 6.5; g.nextCoinGap = 0; g.deadT = 0; g.overT = 0; g.newBest = false; g.pts = 0; g.finalPts = 0; g.newBestPts = false; g.nearCount = 0; g.speedTier = 0;
     g.fx = { shake: 0, flash: opts.noflash ? 0 : 0.6, glitch: 0, chroma: 0, freeze: 0, zoom: 0, hurt: 0, eyeFlash: 0, eyeMiss: 0, speedPulse: 1 };
     g.p = { lane: 1, prevLane: 1, x: 1, y: 0, vy: 0, grounded: true, slide: 0, slideBuf: 0, jumpBuf: 0, fast: false, phase: 0,
-            inv: 0, dead: false, lean: 0, inLane: [-9, -9, -9], slideStart: -9, jumpStart: -9, landT: -9, switchT: -9 };
+            inv: 0, dead: false, foot: false, lean: 0, inLane: [-9, -9, -9], slideStart: -9, jumpStart: -9, landT: -9, switchT: -9 };
     g.camX = 0;
+    g.footT = 0; g.footK = 0; g.bikeAnimT = 99; g.regainT = 99; g.bikeAt = 0; g.bikesLost = 0; g.footSecs = 0;
     g.taunt = { text: 'NEW RUNNER DETECTED', t: 0, next: 3.4 };
     g.ticker = { text: 'NEW RUNNER DETECTED', t: 0 };
     g.bz = [-10, 6];
@@ -305,7 +306,13 @@
     g.time += dt;
     g.featPre(dt);
     const baseV = g.speedAt(g.time);
-    g.speed = baseV * (1 + 0.32 * g.boostK);           // turbo pads push the courier ~32% faster
+    g.footK += ((p.foot ? 1 : 0) - g.footK) * (1 - Math.exp(-dt * 4));      // on foot: ~20% slower
+    if (p.foot) {
+      g.footT -= dt; g.bikeAnimT += dt; g.footSecs += dt;
+      if (g.bikeAnimT < 0.8 && ((g.bikeAnimT * 30) | 0) !== (((g.bikeAnimT - dt) * 30) | 0)) { const sp = g.playerScreen(); g.burst(sp.x + (rnd() - .5) * 30, sp.y - 6, 3, ['#d9d2c0', '#b9b2a2', '#ffd27a'], 70, 0.6, 20); if (rnd() < .6) g.burst(sp.x, sp.y - 10, 2, ['#fff', '#ffd27a'], 150, 0.3, 200); }
+      if (g.footT <= 0) g.regainBike('auto');
+    } else g.regainT += dt;
+    g.speed = baseV * (1 - 0.2 * g.footK) * (1 + 0.32 * g.boostK);           // turbo pads push the courier ~32% faster
     const v = g.speed, dz = v * dt;
     g.dist += dz;
     // speed tier juice
@@ -427,7 +434,7 @@
     for (const b of g.boards) if (!b.text && b.z < 64) { b.text = g.taunt.text; b.flick = 0.4; }
 
     // ---- audio intensity
-    g.threat = br.threat(g.time);
+    g.threat = Math.min(10, br.threat(g.time) + Math.round(4 * g.footK));   // on foot: the cops close in
 
     // ---- cull
     g.obs = g.obs.filter(o => o.z + o.depth > -14);
@@ -525,7 +532,33 @@
     if (g.god) { p.inv = 0.5; g.emit('godhit'); g.godHits = (g.godHits || 0) + 1; return; }
     if (g.perk.autododge && !g.autoUsed) { g.autoUsed = true; g.bailOut(o, 'AUTO-DODGE'); return; }
     if (g.up.bail > 0 && !g.bailUsed) { g.bailOut(o); return; }
-    g.die(o);
+    if (!p.foot) { g.loseBike(o); return; }       // first hit: lose the ride, keep running
+    g.die(o);                                     // second hit on foot: busted
+  };
+
+  /* Lose-the-ride: the first unavoided hit wrecks the bike; the rider keeps running on foot (slower, heat up). A rare BIKE pickup or ~22 s gets it back. */
+  Game.FOOT_MAX = 22;
+  Game.loseBike = function (o) {
+    const g = this, p = g.p;
+    p.foot = true; g.footT = g.FOOT_MAX; g.bikeAnimT = 0; g.regainT = 99; g.bikesLost++; g.bikeAt = g.time + 6;
+    p.inv = 1.5; g.combo = 0; g.comboP = 0; g.comboT = 0; p.slide = 0; p.slideBuf = 0;
+    if (o) g.obs = g.obs.filter(ob => ob !== o);
+    g.shake(4.5); g.fx.hurt = 1; g.fx.freeze = 0.1; g.fx.flash = 0.7; g.fx.chroma = 0.8;
+    const sp = g.playerScreen();
+    g.burst(sp.x, sp.y - 12, 34, ['#ffd27a', '#e8a24c', '#fff', '#b8503a'], 170, 0.8, 140);
+    g.burst(sp.x, sp.y - 6, 18, ['#d9d2c0', '#b9b2a2', '#8c867a'], 80, 0.9, 10);
+    g.pop('BIKE WRECKED!', g.W2 || 160, 60, '#ff6a4a', 2, 1.6);
+    g.emit('bikelost');
+  };
+  Game.regainBike = function (how) {
+    const g = this, p = g.p; if (!p.foot) return;
+    p.foot = false; g.regainT = 0; g.footT = 0; p.inv = Math.max(p.inv, 1.0);
+    for (const it of g.items) if (it.kind === 'bike') it.taken = true;
+    g.fx.flash = 0.45; g.fx.zoom = 0.8; g.fx.speedPulse = 1;
+    const sp = g.playerScreen(); g.burst(sp.x, sp.y - 14, 22, ['#79b95f', '#fff', '#f0b24a'], 120, 0.6, 40);
+    g.pop(how === 'pickup' ? 'BIKE BACK! +' + cmp(CX * 40) : 'BIKE BACK!', g.W2 || 160, 60, '#79b95f', 2, 1.6);
+    if (how === 'pickup') g.score += CX * 40;
+    g.emit('bikeback', { how });
   };
 
   /* Bail-out upgrade: once per run the crash is cancelled, the whole obstacle wave ahead is cleared */
