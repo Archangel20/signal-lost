@@ -371,3 +371,110 @@ button{-webkit-tap-highlight-color:transparent}
 @keyframes logoslam{0%{opacity:0;transform:scale(2.1)}55%{opacity:1;transform:scale(.96)}78%{transform:scale(1.03)}100%{opacity:1;transform:none}}
 @keyframes logoshine{from{background-position:120% 0}to{background-position:-20% 0}}
 @media (prefers-reduced-motion:reduce){#title[data-intro="1"] h1,#title[data-intro="1"] h1 span,#title[data-intro="2"] h1 span{animation:none}}
+
+/* ===================== v11 THEME: warm gold / amber / cream, no plain white =====================
+   Palette: gold #ffc83d, amber #ffab2e, cream #ffecc8, cash green-gold #b4dc4a, ink #2b1706.
+   Legibility from a solid dark-brown outline + soft drop shadow (no glow, no glitch, no pixel fonts). */
+:root{--gold:#ffc83d;--gold-hi:#ffe08a;--amber:#ffab2e;--cream:#ffecc8;--money:#b4dc4a;--ink:#2b1706;--panel-b:rgba(34,20,7,.74);--edge:rgba(255,200,90,.5);
+ --ol:0 1px 0 var(--ink),0 -1px 0 var(--ink),1px 0 0 var(--ink),-1px 0 0 var(--ink),1px 1px 0 var(--ink),-1px 1px 0 var(--ink),0 2px 4px rgba(0,0,0,.55);
+ --ol2:0 2px 0 var(--ink),0 -2px 0 var(--ink),2px 0 0 var(--ink),-2px 0 0 var(--ink),2px 2px 0 var(--ink),-2px 2px 0 var(--ink),2px -2px 0 var(--ink),-2px -2px 0 var(--ink),0 5px 0 var(--ink),0 8px 14px rgba(0,0,0,.5)}
+html,body{color:var(--cream)}
+h1,h2,h3{color:var(--gold)}
+/* ---- title ---- */
+#title h1{color:var(--gold);text-shadow:var(--ol2);letter-spacing:.05em}
+#title h1 span:last-child{color:var(--amber)}
+#title[data-intro] h1 span{background:linear-gradient(105deg,#ffc83d 0,#ffc83d 42%,#fff0b0 50%,#ffc83d 58%,#ffc83d 100%);background-size:260% 100%;background-position:120% 0;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;text-shadow:none;
+ filter:drop-shadow(2px 0 0 var(--ink)) drop-shadow(-2px 0 0 var(--ink)) drop-shadow(0 2px 0 var(--ink)) drop-shadow(0 -2px 0 var(--ink)) drop-shadow(0 5px 0 var(--ink)) drop-shadow(0 9px 10px rgba(0,0,0,.45))}
+#title[data-intro] h1 span:last-child{background-image:linear-gradient(105deg,#ffab2e 0,#ffab2e 42%,#ffe39a 50%,#ffab2e 58%,#ffab2e 100%)}
+.tag{color:var(--gold-hi);text-shadow:var(--ol);font-weight:500;letter-spacing:.08em}
+.tchip{color:var(--cream);background:var(--panel-b);border-color:var(--edge);text-shadow:var(--ol)}
+.tchip span{color:var(--gold-hi)}
+.tchip b{color:var(--amber);font-weight:700}
+.tchip #wallet,#wallet{color:var(--money)}
+.tchip.help{color:var(--gold)}
+.tchip.help:hover,.tchip.help:focus-visible{background:var(--gold);color:var(--ink);text-shadow:none}
+.start{color:var(--ink);background:linear-gradient(180deg,#ffdc6e 0,#ffc83d 55%,#f0a21c 100%);box-shadow:0 4px 0 #7a4707,0 0 0 2px var(--ink),0 10px 18px rgba(0,0,0,.4);text-shadow:0 1px 0 rgba(255,240,190,.6)}
+.start:hover,.start:focus-visible{background:linear-gradient(180deg,#ffe58c 0,#ffd04f 55%,#f7b02e 100%);outline:none}
+.tb{color:var(--gold-hi);background:var(--panel-b);border:1.5px solid var(--edge);text-shadow:var(--ol)}
+.tb:hover,.tb:focus-visible{background:var(--gold);color:var(--ink);text-shadow:none;outline:none}
+.sec{color:var(--gold-hi);background:var(--panel-b);border:2px solid var(--edge);text-shadow:var(--ol)}
+.sec:hover,.sec:focus-visible{background:var(--gold);color:var(--ink);text-shadow:none;outline:none}
+.cta{color:var(--ink);background:linear-gradient(180deg,#ffdc6e 0,#ffc83d 55%,#f0a21c 100%);border:0;box-shadow:0 3px 0 #7a4707,0 0 0 2px var(--ink);text-shadow:0 1px 0 rgba(255,240,190,.6)}
+.cta small{color:#6b4210}
+.cta:hover,.cta:focus-visible{background:linear-gradient(180deg,#ffe58c 0,#ffd04f 55%,#f7b02e 100%);outline:none}
+.buy{color:var(--ink);background:linear-gradient(180deg,#ffd45a,#f2a920)}
+.buy:hover,.buy:focus-visible{background:#ffe08a}
+.buy.own{background:var(--gold-hi)}
+.buy[disabled]{background:transparent;color:rgba(255,224,150,.6);border:1.5px solid var(--edge)}
+.buy.eq{color:var(--money);border-color:var(--money);background:transparent}
+/* ---- HUD ---- */
+#hud #scorebox b{color:var(--amber);text-shadow:var(--ol2);font-size:30px}
+#hud #scorebox i{color:var(--gold-hi);text-shadow:var(--ol)}
+#hud #cash,#hud #money{color:var(--money);text-shadow:var(--ol);font-size:22px}
+#hud #stars path{fill:var(--gold);stroke:var(--ink);stroke-width:2.2}
+#hud #stars path.off{fill:rgba(70,40,12,.55)}
+#btn-pause,#btns button{color:var(--gold-hi);background:var(--panel-b);box-shadow:inset 0 0 0 1.5px var(--edge)}
+#btn-pause:hover,#btn-pause:focus-visible,#btns button:hover,#btns button:focus-visible{outline:2px solid var(--gold)}
+#hud #word i{color:var(--cream);background:var(--panel-b);border-color:var(--edge);text-shadow:var(--ol)}
+#hud #word i.on{background:var(--gold);border-color:var(--ink);color:var(--ink);text-shadow:none}
+#tkchip{color:var(--gold-hi);text-shadow:var(--ol)}#tkchip svg{color:var(--gold)}
+#chip{color:var(--ink)}
+#chip[data-k=foot]{background:#c25a36;color:#fff0d0;text-shadow:0 1px 0 rgba(0,0,0,.4)}
+#chip[data-k=magnet]{color:var(--ink)}
+#banner{background:var(--panel-b);box-shadow:inset 0 0 0 1.5px var(--edge);font-size:20px}
+#banner b{color:var(--gold);text-shadow:var(--ol)}
+#banner.good b{color:#ffd35c}#banner.bad b{color:#ff8a66}#banner.place b{color:var(--gold-hi)}
+#hud #hint{color:var(--cream);text-shadow:var(--ol)}
+#hud #hint b{color:var(--gold)}
+#btn-head{color:var(--gold-hi);background:var(--panel-b);border-color:var(--edge);text-shadow:var(--ol)}
+.ticking .cv,.ticking.cv{color:var(--gold-hi)}
+/* ---- pause / game over ---- */
+.pcard h2{color:var(--gold);text-shadow:var(--ol2)}
+.pcard p{color:var(--cream);text-shadow:var(--ol)}
+#wtxt{text-shadow:var(--ol2)}
+#card{background:rgba(32,19,8,.9);border-color:var(--edge)}
+.chead{color:var(--gold);border-bottom-color:var(--edge);text-shadow:var(--ol)}
+.chead #csub{color:var(--cream);opacity:.9}
+#cstats .sc-score{border-left-color:var(--amber)}
+#cstats .sc-score b{color:var(--amber);text-shadow:var(--ol)}
+#cstats .sc-best{border-left-color:var(--gold)}#cstats .sc-best b{color:var(--gold-hi);text-shadow:var(--ol)}
+#cstats .sc-cash,#cstats .sc-total{border-left-color:var(--money)}
+#cstats .sc-cash b,#cstats .sc-total b{color:var(--money);text-shadow:var(--ol)}
+#crows .k{color:var(--cream)}
+#crows .v{color:var(--gold-hi)}
+#crows .v.hot{color:var(--amber)}
+#lanes .ln{color:var(--cream)}
+#lanes .bar{background:rgba(255,224,150,.6)}
+#lanes .ln.hot .bar{background:var(--amber)}
+#verdict{color:var(--gold);text-shadow:var(--ol)}
+#tip{color:var(--cream)}
+#cwallet{color:var(--money)}
+.info .m{color:var(--cream)}
+/* ---- menus (Characters / Locations / Upgrades / How to play / Settings) ---- */
+.modal{background:rgba(18,10,3,.84)}
+.mcard{border-color:var(--edge)}
+.mhead{border-bottom-color:var(--edge)}
+.mhead h2{color:var(--gold);text-shadow:var(--ol)}
+.wal small{color:var(--cream)}
+.wal b{color:var(--money);text-shadow:var(--ol)}
+#shop-tabs button{color:rgba(255,224,150,.7)}
+#shop-tabs button[aria-selected="true"]{color:var(--gold);text-shadow:var(--ol)}
+.char .cn,.loc .ln{color:var(--gold-hi);text-shadow:var(--ol)}
+.char .perk{color:var(--cream)}
+.loc .ls,.loc .th,.loc .need,.loc .hint{color:var(--cream)}
+.row{color:var(--cream);text-shadow:var(--ol)}
+.how{color:var(--cream);text-shadow:var(--ol)}
+.hctrl{color:var(--cream);text-shadow:var(--ol)}
+.hctrl b{color:var(--gold)}
+#nogl h2{color:var(--gold)}
+.mcard{background:rgba(27,17,7,.97)}
+.row[aria-checked="true"] i,.row.on i{background:var(--gold)}
+/* ---- pause menu (v11): Resume / Restart / Quit ---- */
+#pause{background:rgba(18,10,3,.7)}
+#pause .pcard{display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*1.4);width:min(92vw,420px);padding:0 8px}
+#pause .info{width:100%}
+.pbtns{display:flex;flex-direction:column;gap:12px;width:100%;margin-top:6px;pointer-events:auto}
+.pbtns button{width:100%;min-height:58px;font:700 20px/1 var(--f);letter-spacing:.2em;text-indent:.2em;text-transform:uppercase;border-radius:4px;cursor:pointer;touch-action:manipulation}
+.pbtns .cta{min-height:66px;font-size:24px}
+.pbtns .sec{flex:none;font-size:18px;letter-spacing:.16em}
+#pause .pcard p.phint{margin:0;font-size:13px;letter-spacing:.14em;color:var(--gold-hi);opacity:.8}
