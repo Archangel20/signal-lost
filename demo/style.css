@@ -224,7 +224,8 @@ html.touch .cta small{display:none}
    8 px grid. Type: logo (display) + 20 px (START, tagline) + 14 px (everything else). Weights: 700 labels / 500 tagline. */
 #title{--g:8px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:calc(var(--g)*2);overflow:hidden;color:#fff;font-family:var(--f);text-shadow:0 2px 0 rgba(0,0,0,.55);
   padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
-  background:linear-gradient(180deg,rgba(6,7,10,.9) 0,rgba(6,7,10,.62) 30%,rgba(6,7,10,.12) 52%,rgba(6,7,10,.5) 74%,rgba(6,7,10,.92) 100%)}
+  background:none}
+#title::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(180deg,rgba(6,7,10,.9) 0,rgba(6,7,10,.62) 30%,rgba(6,7,10,.12) 52%,rgba(6,7,10,.5) 74%,rgba(6,7,10,.92) 100%);transition:opacity .8s ease}
 .tbar{width:100%;max-width:960px;height:48px;flex:none;display:flex;align-items:center;gap:8px}
 .tbar .sp{flex:1}
 .tchip{display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 16px;font:700 14px/1 var(--f);letter-spacing:.1em;text-transform:uppercase;color:#fff;background:rgba(8,9,12,.62);border:1px solid rgba(255,255,255,.3);border-radius:4px;white-space:nowrap}
@@ -333,3 +334,40 @@ body.ended #btn-pause,body.ended #hrow,body.ended #banner,body.ended #hint{displ
 @media (max-height:860px){#lanes,#tip{display:none}}
 @media (max-height:700px){#oinfo .m:nth-child(n+2){display:none}#crows{display:none}}
 @media (max-height:430px) and (orientation:landscape){#oinfo,#verdict,#cwallet{display:none}#cstats{grid-template-columns:repeat(4,1fr)}#cstats>*{min-height:0}}
+
+/* ===== v10 polish: power-up chips, boost-start button, speed lines, micro-animations ===== */
+#chip[data-k=shield]{background:#5f93c4;color:#f4f7fb}
+#chip[data-k=magnet]{background:#c8553f;color:#f6eee4}
+#chip{animation:chipin .22s cubic-bezier(.2,1.4,.4,1) both}
+@keyframes chipin{from{transform:scale(.7);opacity:0}to{transform:none;opacity:1}}
+#fx-speed{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:3}
+#btn-head{position:absolute;right:14px;bottom:calc(15% + env(safe-area-inset-bottom,0px));pointer-events:auto;display:flex;align-items:center;gap:8px;height:42px;padding:0 16px 0 12px;border:1px solid rgba(255,255,255,.4);border-radius:21px;background:rgba(10,12,16,.62);color:#f2d68a;font:700 13px/1 var(--f);letter-spacing:.1em;text-transform:uppercase;cursor:pointer;touch-action:manipulation;animation:headin .35s cubic-bezier(.2,1.4,.4,1) both,headpulse 1.4s ease-in-out .5s infinite;text-shadow:none}
+#btn-head svg{width:18px;height:18px}
+#btn-head:active{transform:scale(.94)}
+@keyframes headin{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+@keyframes headpulse{50%{box-shadow:0 0 0 6px rgba(242,214,138,.16)}}
+button{-webkit-tap-highlight-color:transparent}
+.start,#btn-retry,.oa button{transition:transform .12s ease,filter .12s ease}
+.start:active,#btn-retry:active,.oa button:active{transform:scale(.96);filter:brightness(1.08)}
+#over.card #card{transition:opacity .35s ease,transform .45s cubic-bezier(.2,1.1,.3,1)}
+#over:not(.card) #card{transform:translateY(14px) scale(.98)}
+.cv{font-variant-numeric:tabular-nums;transition:color .2s ease}
+.ticking .cv,.ticking.cv{color:#f2d68a}
+#title.screen{animation:scrin .35s ease-out both}
+#pause:not(.hidden){animation:scrin .2s ease-out both}
+@keyframes scrin{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){#btn-head,#chip,#title.screen,#pause:not(.hidden){animation:none}}
+
+/* ===== v10 title intro: aerial sweep -> rider skids in -> logo slam + shine -> START scales in ===== */
+#title[data-intro] .tbar,#title[data-intro] .tag,#title[data-intro] .tact{transition:opacity .55s ease,transform .55s cubic-bezier(.2,1.2,.3,1)}
+#title[data-intro="0"]::before{opacity:0}
+#title[data-intro="0"] h1{opacity:0}
+#title[data-intro="0"] .tbar,#title[data-intro="0"] .tag,#title[data-intro="1"] .tbar,#title[data-intro="1"] .tag{opacity:0}
+#title[data-intro="0"] .tact,#title[data-intro="1"] .tact{opacity:0;transform:translateY(14px) scale(.92)}
+#title[data-intro="0"] .tbar,#title[data-intro="1"] .tbar,#title[data-intro="0"] .tact,#title[data-intro="1"] .tact{pointer-events:none}
+#title[data-intro] h1 span{background:linear-gradient(105deg,#fff 0,#fff 42%,#ffe6a0 50%,#fff 58%,#fff 100%);background-size:260% 100%;background-position:120% 0;-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;text-shadow:none;filter:drop-shadow(0 4px 0 rgba(0,0,0,.6)) drop-shadow(0 8px 14px rgba(0,0,0,.45))}
+#title[data-intro="1"] h1{animation:logoslam .5s cubic-bezier(.15,1.1,.3,1) both}
+#title[data-intro="1"] h1 span,#title[data-intro="2"] h1 span{animation:logoshine 1.1s ease-out .35s both}
+@keyframes logoslam{0%{opacity:0;transform:scale(2.1)}55%{opacity:1;transform:scale(.96)}78%{transform:scale(1.03)}100%{opacity:1;transform:none}}
+@keyframes logoshine{from{background-position:120% 0}to{background-position:-20% 0}}
+@media (prefers-reduced-motion:reduce){#title[data-intro="1"] h1,#title[data-intro="1"] h1 span,#title[data-intro="2"] h1 span{animation:none}}

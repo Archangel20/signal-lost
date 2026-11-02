@@ -10,7 +10,7 @@
 <meta property="og:description" content="The city is learning you. Stay unpredictable.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2314161b'/%3E%3Cpath d='M16 5l3.4 7 7.6 1-5.6 5.2 1.5 7.6L16 22l-6.9 3.8 1.5-7.6L5 13l7.6-1z' fill='%23fff'/%3E%3C/svg%3E">
 <script>(function(){var d=document.documentElement,m=window.matchMedia;try{if((m&&m('(pointer:coarse)').matches)||(navigator.maxTouchPoints>0&&m&&!m('(hover:hover)').matches))d.className+=' touch';}catch(e){}})();</script>
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 <canvas id="game" aria-label="Signal Lost game view" role="img"></canvas>
@@ -31,6 +31,7 @@
   <div id="banner"><b id="bn-t"></b></div>
   <div id="toasts"></div>
   <div id="hint" class="hidden"></div>
+  <button id="btn-head" type="button" class="hidden" aria-label="Boost start"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5l8 7-8 7zM12 5l8 7-8 7z" fill="currentColor"/></svg><span>Boost start</span></button>
 </div>
 
 <div id="title" class="screen">
@@ -109,6 +110,7 @@
       <button type="button" class="row" data-set="master" role="switch"><span>Sound</span><i></i></button>
       <button type="button" class="row" data-set="music" role="switch"><span>Music</span><i></i></button>
       <button type="button" class="row" data-set="sfx" role="switch"><span>Effects</span><i></i></button>
+      <button type="button" class="row" data-set="voice" role="switch"><span>Character voices</span><i></i></button>
       <button type="button" class="row" data-set="haptics" role="switch"><span>Vibration</span><i></i></button>
     </div>
   </div>
@@ -121,17 +123,17 @@
 </div>
 <noscript><p style="color:#fff;font-family:sans-serif;text-align:center">Signal Lost needs JavaScript and WebGL.</p></noscript>
 <div id="nogl" class="screen hidden"><div class="pcard"><h2>WebGL unavailable</h2><p>This game needs a browser with WebGL enabled.</p></div></div>
-<script src="js/vendor/three.min.js?v=9"></script>
-<script src="js/save.js?v=9"></script>
-<script src="js/audio.js?v=9"></script>
-<script src="js/ai.js?v=9"></script>
-<script src="js/stages.js?v=9"></script>
-<script src="js/game.js?v=9"></script>
-<script src="js/features.js?v=9"></script>
-<script src="js/chars3d.js?v=9"></script>
-<script src="js/render3d.js?v=9"></script>
-<script src="js/hud.js?v=9"></script>
-<script src="js/shop.js?v=9"></script>
-<script src="js/main.js?v=9"></script>
+<script src="js/vendor/three.min.js?v=10"></script>
+<script src="js/save.js?v=10"></script>
+<script src="js/audio.js?v=10"></script>
+<script src="js/ai.js?v=10"></script>
+<script src="js/stages.js?v=10"></script>
+<script src="js/game.js?v=10"></script>
+<script src="js/features.js?v=10"></script>
+<script src="js/chars3d.js?v=10"></script>
+<script src="js/render3d.js?v=10"></script>
+<script src="js/hud.js?v=10"></script>
+<script src="js/shop.js?v=10"></script>
+<script src="js/main.js?v=10"></script>
 </body>
 </html>
