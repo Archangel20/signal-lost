@@ -1,4 +1,4 @@
-/* SIGNAL LOST — the ten stages. Pure data: the simulation reads names, the renderer reads the look.
+/* SIGNAL LOST — the sixteen stages. Pure data: the simulation reads names, the renderer reads the look.
    A new stage begins every STAGE_TIME seconds of running (default 180 s = 3 minutes, override with ?stagetime=10 for testing). */
 (function (global) {
   'use strict';
@@ -57,7 +57,38 @@
       zen: 0x0f1c40, mid: 0x2a4278, hor: 0x5a78b0, fog: 0x2a3c6a, fogNear: 35, fogFar: 190, glow: 0,
       sunCol: 0x8ea6e0, sunInt: 1.4, sun: [12, 38, 18], disc: 0.35, discCol: 0xdfe6f5, discPos: [70, 45], hemiSky: 0x6a80c0, hemiGnd: 0x1c2030, hemiInt: 1.45, fill: 0.85,
       facEm: 1.3, shopEm: 1.1, lampOn: 0.9, lampCol: 0xffd9a0, road: [1.3, 1.35, 1.5], walk: [1.3, 1.35, 1.5], ground: 0x22262e, groundY: -0.05,
-      bld: 1.5, bldTint: 0xb4c4e8, sky: 1.7, skyTint: 0xb4c4e8, shops: 1, lamps: 1, park: 1, stars: 1, rain: 0, props: { palm: 0.7 } }
+      bld: 1.5, bldTint: 0xb4c4e8, sky: 1.7, skyTint: 0xb4c4e8, shops: 1, lamps: 1, park: 1, stars: 1, rain: 0, props: { palm: 0.7 } },
+    /* v11 international stages. snow = falling snow amount. */
+    { id: 'st11', name: 'Shanghai Old Street', sub: 'Lantern dusk on the old town',
+      zen: 0x2b2a56, mid: 0x9a4a6a, hor: 0xf29a64, fog: 0xb8705e, fogNear: 34, fogFar: 185, glow: 0.7,
+      sunCol: 0xff9a5a, sunInt: 1.9, sun: [-18, 14, 20], disc: 0.8, discCol: 0xffb070, discPos: [-80, 16], hemiSky: 0xd8907a, hemiGnd: 0x3a2428, hemiInt: 1.35, fill: 0.7,
+      facEm: 0.9, shopEm: 1.2, lampOn: 0.9, lampCol: 0xff8a3c, road: [1.12, 1.04, 1.02], walk: [1.3, 1.1, 1.0], ground: 0x3a2a28, groundY: -0.05,
+      bld: 0.75, bldTint: 0xd8977c, sky: 0.8, skyTint: 0x9a6070, shops: 1, lamps: 1, park: 0.3, stars: 0.25, rain: 0, snow: 0, props: { lantern: 1, pagoda: 0.9 } },
+    { id: 'st12', name: 'Frostbite Town', sub: 'Fresh powder, falling snow',
+      zen: 0x5a82b0, mid: 0xb4cde2, hor: 0xeef4fa, fog: 0xd8e4ee, fogNear: 22, fogFar: 150, glow: 0.2,
+      sunCol: 0xe8f0ff, sunInt: 2.0, sun: [-12, 26, 16], disc: 0.2, discCol: 0xf4f8ff, discPos: [-50, 40], hemiSky: 0xcfdcea, hemiGnd: 0x9aa8b8, hemiInt: 1.7, fill: 0.9,
+      facEm: 0.25, shopEm: 0.5, lampOn: 0.25, lampCol: 0xffe2b0, road: [1, 1, 1.03], walk: [2.7, 2.8, 3.0], ground: 0xe6edf4, groundY: -0.02,
+      bld: 0.45, bldTint: 0xdbe4ee, sky: 0.3, skyTint: 0xc4d2e0, shops: 1, lamps: 1, park: 0.25, stars: 0, rain: 0, snow: 1, props: { snowpine: 1, snowbank: 1, cabin: 0.6 } },
+    { id: 'st13', name: 'Dubai Marina', sub: 'Glass towers in the desert sun',
+      zen: 0x2f7fd0, mid: 0xa8d0ea, hor: 0xfaebcc, fog: 0xecdcbc, fogNear: 55, fogFar: 240, glow: 0.45,
+      sunCol: 0xfff2d0, sunInt: 3.1, sun: [8, 40, 12], disc: 0.9, discCol: 0xfff8e4, discPos: [40, 58], hemiSky: 0xcfe0ee, hemiGnd: 0x9a8258, hemiInt: 1.5, fill: 0.6,
+      facEm: 0.05, shopEm: 0.35, lampOn: 0, lampCol: 0xffe0a8, road: [1.28, 1.2, 1.08], walk: [1.7, 1.5, 1.2], ground: 0xd6b580, groundY: -0.1,
+      bld: 1.7, bldTint: 0xbcdcf0, sky: 2.0, skyTint: 0xb8d8ee, shops: 1, lamps: 1, park: 0.6, stars: 0, rain: 0, snow: 0, props: { palm: 1, spire: 0.8, dune: 1 } },
+    { id: 'st14', name: 'Tokyo Night', sub: 'Back streets after the rain',
+      zen: 0x0a101e, mid: 0x1a2840, hor: 0x3c4c66, fog: 0x18223a, fogNear: 26, fogFar: 170, glow: 0,
+      sunCol: 0x9ab0d8, sunInt: 1.2, sun: [10, 36, 16], disc: 0.3, discCol: 0xdfe6f5, discPos: [60, 50], hemiSky: 0x5a6e92, hemiGnd: 0x1a1c24, hemiInt: 1.3, fill: 0.85,
+      facEm: 1.25, shopEm: 1.05, lampOn: 1, lampCol: 0xffd8a8, road: [1.05, 1.1, 1.25], walk: [1.05, 1.1, 1.22], ground: 0x1c2028, groundY: -0.05,
+      bld: 1.1, bldTint: 0xaab4c8, sky: 1.4, skyTint: 0x90a0c0, shops: 1, lamps: 1, park: 0.9, stars: 0.6, rain: 0.3, snow: 0, props: { tpole: 1, vending: 1, sakura: 0.8 } },
+    { id: 'st15', name: 'London Rain', sub: 'Grey drizzle over brick terraces',
+      zen: 0x4a5560, mid: 0x7c8892, hor: 0xb0b8be, fog: 0x7a848c, fogNear: 20, fogFar: 135, glow: 0,
+      sunCol: 0xb4bec6, sunInt: 1.5, sun: [0, 32, 10], disc: 0, discCol: 0xdde4ea, discPos: [0, 40], hemiSky: 0x9aa8b4, hemiGnd: 0x2a2e32, hemiInt: 1.35, fill: 0.85,
+      facEm: 0.5, shopEm: 0.6, lampOn: 0.75, lampCol: 0xffd8a0, road: [0.9, 0.95, 1.04], walk: [1.0, 1.02, 1.08], ground: 0x2e3438, groundY: -0.05,
+      bld: 0.8, bldTint: 0xc29a86, sky: 0.7, skyTint: 0x8a949c, shops: 1, lamps: 1, park: 0.7, stars: 0, rain: 1, snow: 0, props: { phonebox: 1, clocktower: 0.6, tree: 0.5 } },
+    { id: 'st16', name: 'Rio Favela', sub: 'Hillside colour and golden light',
+      zen: 0x2a78d0, mid: 0x7ec0e8, hor: 0xfff0c4, fog: 0xe8d8ae, fogNear: 45, fogFar: 215, glow: 0.7,
+      sunCol: 0xffe4a8, sunInt: 3.0, sun: [-14, 34, 16], disc: 0.95, discCol: 0xfff4d0, discPos: [-40, 55], hemiSky: 0xcfe2ee, hemiGnd: 0x8a6a42, hemiInt: 1.5, fill: 0.65,
+      facEm: 0.05, shopEm: 0.4, lampOn: 0, lampCol: 0xffe0a8, road: [1.12, 1.06, 0.96], walk: [1.5, 1.3, 1.0], ground: 0x8a6a46, groundY: -0.1,
+      bld: 0.3, bldTint: 0xf2cba0, sky: 0.35, skyTint: 0xb8c8a8, shops: 1, lamps: 1, park: 0.4, stars: 0, rain: 0, snow: 0, props: { favela: 1, palm: 0.8, hill: 1 } }
   ];
   global.STAGES = STAGES;
   global.STAGE_TIME = stageTime;
