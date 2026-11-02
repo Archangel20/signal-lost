@@ -16,21 +16,22 @@
     return s;
   }
   H.sentence = sentence;
-  const money = n => '$' + Math.floor(n).toLocaleString('en-US');
+  const money = n => '\u20A6' + global.Save.compact(n);
+  const num = n => Math.floor(n).toLocaleString('en-US');
   const mmss = t => { t = Math.floor(t); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
   function setText(key, node, v) { if (last[key] !== v) { last[key] = v; node.textContent = v; } }
   function setCls(key, node, cls, on) { on = !!on; if (last[key] !== on) { last[key] = on; node.classList.toggle(cls, on); } }
 
   H.init = function (game, handlers) {
     G = game; H.h = handlers || {};
-    ['hud', 'money', 'mult', 'stars', 'predict', 'jam', 'jamtxt', 'toasts', 'hint', 'subs', 'title', 'pause', 'over', 'wtxt', 'csub', 'crows', 'lanes', 'verdict', 'tip', 'cscore', 'cnew', 'best', 'game', 'mapwrap', 'btn-retry', 'btn-start', 'minimap', 'bail', 'cwallet', 'wallet'].forEach(k => el[k] = $(k));
+    ['hud', 'loctask', 'money', 'mult', 'stars', 'predict', 'jam', 'jamtxt', 'toasts', 'hint', 'subs', 'title', 'pause', 'over', 'wtxt', 'csub', 'crows', 'lanes', 'verdict', 'tip', 'cscore', 'cnew', 'best', 'game', 'mapwrap', 'btn-retry', 'btn-start', 'minimap', 'bail', 'cwallet', 'wallet', 'word', 'missions', 'score', 'cstats', 'daily', 'quest', 'rival', 'stagebanner', 'sb-k', 'sb-n', 'sb-s', 'nowplaying', 'chip-turbo', 'chip-x2', 'chip-perk'].forEach(k => el[k] = $(k));
     el.sm = el.subs.querySelector('.msg');
     let s = '';
     for (let i = 0; i < 5; i++) s += `<path d="${STAR}" transform="translate(${i * 30} 0)"/>`;
     el.stars.innerHTML = s; el.starsP = Array.from(el.stars.querySelectorAll('path'));
     mm = el.minimap; mmc = mm.getContext('2d');
     el['btn-retry'].addEventListener('click', e => { e.stopPropagation(); H.h.retry && H.h.retry(); });
-    el['btn-garage-over'] = $('btn-garage-over');
+    el['btn-chars-over'] = $('btn-chars-over');
     el['btn-start'].addEventListener('click', e => { e.stopPropagation(); H.h.start && H.h.start(); });
     el.pause.addEventListener('pointerup', () => H.h.resume && H.h.resume());
     H.resize();
@@ -83,6 +84,14 @@
     // cash + jammers
     c.fillStyle = '#79b95f';
     for (const k of G.coinsL) { if (k.taken || k.z > 66 || k.z < -12) continue; c.fillRect(X((k.lane - 1) * LW) - S / 120, Y(k.z) - S / 120, S / 60, S / 60); }
+    for (const it of G.items || []) {
+      if (it.taken || it.z > 70 || it.z + (it.depth || 0) < -12) continue;
+      const ix = X((it.lane - 1) * LW);
+      if (it.kind === 'letter') { c.fillStyle = '#f0b24a'; c.beginPath(); c.arc(ix, Y(it.z), S / 36, 0, 7); c.fill(); }
+      else if (it.kind === 'x2') { c.fillStyle = '#79b95f'; c.beginPath(); c.arc(ix, Y(it.z), S / 36, 0, 7); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1; c.stroke(); }
+      else if (it.kind === 'key' || it.kind === 'tletter' || it.kind === 'relic' || it.kind === 'lockbox' || it.kind === 'parcel') { c.fillStyle = it.kind === 'parcel' ? '#e8d29a' : '#7fd0d6'; c.beginPath(); c.arc(ix, Y(it.z), S / 32, 0, 7); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1; c.stroke(); }
+      else { c.fillStyle = it.kind === 'drop' ? '#7fd0d6' : it.kind === 'ramp' ? '#d99a3a' : '#e8d29a'; c.fillRect(ix - 1.05 * kx, Y(it.z + it.depth), 2.1 * kx, Math.max(3, it.depth * kz)); }
+    }
     for (const k of G.chips) { if (k.taken || k.z > 70) continue; c.fillStyle = '#8fd8ff'; c.beginPath(); c.arc(X((k.lane - 1) * LW), Y(k.z), S / 40, 0, 7); c.fill(); }
     // player
     const px = X((G.p.x - 1) * LW);
@@ -114,7 +123,7 @@
     setCls('t_pause', el.pause, 'hidden', !paused);
     if (inTitle) {
       const sv = global.Save && Save.data, day = sv && sv.daily.d === Save.today() ? sv.daily : { best: 0, runs: 0 };
-      const b = [G.best ? 'Best ' + money(G.best) : '', day.best ? 'Today ' + money(day.best) : ''].filter(Boolean).join('  ·  ');
+      const b = G.bestPts ? 'Best score ' + num(G.bestPts) : '';
       setText('best', el.best, b); if (sv) setText('wallet', el.wallet, money(sv.wallet));
     }
 
@@ -136,6 +145,7 @@
     const blind = G.blindT > 0;
     // money, multiplier
     setText('money', el.money, money(st === 'dead' ? (G.finalScore || G.score) : G.score));
+    setText('score', el.score, num(st === 'dead' ? (G.finalPts || G.pts) : G.pts));
     setText('mult', el.mult, G.mult >= 2 ? 'Combo x' + Math.floor(G.mult * 10) / 10 : '');
     // wanted stars
     const stars = clamp(Math.ceil((G.threat || 1) / 2), 1, 5);
@@ -160,33 +170,100 @@
     if (performance.now() > subHideAt || st === 'dead') el.subs.classList.remove('on');
     // first-run tutorial: three short hints, then never again (persisted in Save)
     const tutOn = G.hint && st === 'play', tt = G.time;
-    const stage = !tutOn ? -1 : tt < 4.5 ? 0 : tt < 8.5 ? 1 : tt < 13 ? 2 : -1;
+    const stage = !tutOn ? -1 : tt < 4.5 ? 0 : tt < 8.5 ? 1 : tt < 14 ? 2 : -1;
     setCls('t_hint', el.hint, 'hidden', stage < 0);
     if (stage !== last.tutStage) {
       last.tutStage = stage; const touch = document.documentElement.classList.contains('touch');
       if (stage === 0) el.hint.innerHTML = touch ? '<b>Swipe</b> left / right to change lane' : '<b>← →</b> change lane';
       if (stage === 1) el.hint.innerHTML = touch ? '<b>Swipe up</b> to jump · <b>down</b> to slide' : '<b>↑</b> jump · <b>↓</b> slide';
-      if (stage === 2) el.hint.innerHTML = 'Grab <b>blue jammers</b> to blind the city · spend cash in the <b>Garage</b>';
+      if (stage === 2) el.hint.innerHTML = 'Steer into <b>cash</b> and <b>letters</b> to collect them · <b>blue jammers</b> blind the city';
     }
-    if (tutOn && tt >= 13) { G.hint = false; global.Save && Save.tutDone('done'); }
+    if (tutOn && tt >= 14) { G.hint = false; global.Save && Save.tutDone('done'); }
     updateToasts();
+    updateQuest();
     drawMap();
+  };
+
+  /* ---------------- letters, missions, rival, stage banner, now playing ---------------- */
+  const coinSvg = '<svg class="coin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.6" fill="#d9a93f" stroke="#7a5a14" stroke-width="1.4"/><circle cx="10" cy="10" r="5.6" fill="none" stroke="#8a6a1c" stroke-width="1.1"/></svg>';
+  const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  function updateQuest() {
+    const w = G.word || '', wi = G.wordIdx || 0, flash = G.wordFlash > 0;
+    const wk = w + wi + flash;
+    if (last.wk !== wk) {
+      last.wk = wk;
+      el.word.innerHTML = (flash && G.lastWord ? G.lastWord.split('').map(ch => `<i class="on">${ch}</i>`) : w.split('').map((ch, i) => `<i class="${i < wi ? 'on' : i === wi ? 'next' : ''}">${i < wi ? ch : i === wi ? ch : ''}</i>`)).join('');
+      el.word.classList.toggle('flash', flash);
+    }
+    const ms = G.missions || [];
+    const mk = ms.map(m => m.text + m.p + m.done).join('|');
+    if (last.mk !== mk) {
+      last.mk = mk;
+      el.missions.innerHTML = ms.map(m => `<div class="m${m.done ? ' done' : ''}"><span class="t">${esc(m.text)}</span><em>${m.done ? '+' + Save.compact(m.r) : Math.floor(m.p) + '/' + m.n}</em><u style="width:${Math.round(100 * Math.min(1, m.p / m.n))}%"></u></div>`).join('');
+    }
+    if (G.daily) {
+      const dp = G.dailyDone ? G.daily.n : G.dailyProgress();
+      setText('daily', el.daily, (G.dailyDone ? 'Daily done · ' : 'Daily · ') + G.daily.text.replace(' in one run', '') + (G.dailyDone ? '' : '  ' + dp + '/' + G.daily.n));
+      setCls('t_dailydone', el.daily, 'done', G.dailyDone);
+    }
+    // location unlock task
+    { const ti = G.tkInfo && !G.attract && G.state !== 'title' ? G.tkInfo() : null;
+      if (!ti) { setCls('t_lt', el.loctask, 'hidden', true); }
+      else {
+        const pr = ti.kind === 'stars' ? Math.floor(ti.p) : Math.floor(ti.p), k = ti.title + '|' + pr + '|' + ti.carry + '|' + ti.done + '|' + (ti.flash > 0);
+        if (last.ltk !== k) {
+          last.ltk = k;
+          const mm_ = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+          const val = ti.kind === 'stars' ? mm_(ti.p) + '/' + mm_(ti.n) : ti.kind === 'word' ? ti.word.split('').map((c, i) => i < pr ? c : '\u00B7').join('') : pr + '/' + ti.n;
+          const ttl = ti.done ? ti.loc + ' ready to unlock' : ti.carry ? 'Parcel \u00B7 ride through the drop ring' : ti.title;
+          el.loctask.innerHTML = '<span class="k">Unlock</span><span class="t">' + esc(ttl) + '</span><em>' + esc(val) + '</em><u style="width:' + Math.round(100 * Math.min(1, ti.p / ti.n)) + '%"></u>';
+          el.loctask.classList.toggle('done', ti.done); el.loctask.classList.toggle('pop', ti.flash > 0);
+        }
+        setCls('t_lt', el.loctask, 'hidden', false);
+      } }
+    // rival
+    if (G.rivalName && G.time > 4) {
+      const gap = Math.floor(G.rivalScore - G.pts);
+      setText('rival', el.rival, G.rivalBeaten ? 'Ahead of ' + G.rivalName : G.rivalName + ' · ' + num(Math.max(0, gap)) + ' pts ahead');
+      setCls('t_rivalwin', el.rival, 'win', G.rivalBeaten);
+    } else setText('rival', el.rival, '');
+    // chips
+    setCls('t_cht', el['chip-turbo'], 'hidden', !(G.boostT > 0)); setCls('t_chx', el['chip-x2'], 'hidden', !(G.x2T > 0));
+    if (G.boostT > 0) setText('cht', el['chip-turbo'], 'Turbo ' + Math.ceil(G.boostT) + 's');
+    { const pk = G.perk || {}; let t = '';
+      if (G.cloakT > 0) t = 'Cloak ' + Math.ceil(G.cloakT) + 's'; else if (pk.autododge && !G.autoUsed) t = 'Auto-dodge ready';
+      setCls('t_chp', el['chip-perk'], 'hidden', !t || G.state === 'dead' || G.state === 'over'); if (t) setText('chp', el['chip-perk'], t); }
+    if (G.x2T > 0) setText('chx', el['chip-x2'], 'Double cash ' + Math.ceil(G.x2T) + 's');
+    // stage banner
+    const b = G.banner, STG = global.STAGES, on = !!(b && b.t < 4.2 && G.state === 'play' && STG);
+    if (on) {
+      const s = STG[b.idx % STG.length];
+      setText('sbk', el['sb-k'], 'Location');
+      setText('sbn', el['sb-n'], s.name); setText('sbs', el['sb-s'], s.sub);
+      setCls('t_sb', el.stagebanner, 'on', b.t > 0.05 && b.t < 3.6);
+    } else setCls('t_sb', el.stagebanner, 'on', false);
+    if (np.until && performance.now() > np.until) { np.until = 0; el.nowplaying.classList.remove('on'); }
+    if (G.state === 'dead') el.nowplaying.classList.remove('on');
+  }
+  const np = { until: 0 };
+  H.nowPlaying = function (name) {
+    el.nowplaying.textContent = '\u266A  Now playing \u00B7 ' + name; el.nowplaying.classList.add('on'); np.until = performance.now() + 4200;
   };
 
   function buildCard() {
     last.cardBuilt = true;
     const sm = G.summary || { lines: [], verdict: '', tip: '', overall: 0, share: [.33, .33, .33] };
-    setText('cscore', el.cscore, money(G.finalScore || 0));
-    el.cnew.textContent = G.newBest ? 'New best' : (G.best ? 'Best ' + money(G.best) : '');
+    const svv = global.Save && Save.data;
+    el.cstats.innerHTML =
+      `<div class="cs sc-score"><small>Score</small><b>${num(G.finalPts || 0)}</b></div>` +
+      `<div class="cs sc-best"><small>Best score</small><b>${num(G.bestPts || 0)}</b>${G.newBestPts ? '<i>New best</i>' : ''}</div>` +
+      `<div class="cs sc-cash"><small>Cash earned</small><b>${coinSvg}${money(G.bankedRun || G.finalScore || 0)}</b></div>` +
+      `<div class="cs sc-total"><small>Total cash</small><b>${coinSvg}${money(svv ? svv.wallet : 0)}</b></div>`;
     el.csub.textContent = 'Survived ' + mmss(G.time);
     el.crows.innerHTML = sm.lines.map(l => `<div class="k">${l.k}</div><div class="v${l.hot ? ' hot' : ''}">${l.v}</div>`).join('');
     const names = ['Left', 'Middle', 'Right'], mx = Math.max.apply(null, sm.share);
     el.lanes.innerHTML = sm.share.map((s, i) => `<div class="ln${s === mx && s >= .5 ? ' hot' : ''}"><div class="bar" style="height:${Math.max(4, Math.round(s * 100))}%"></div>${names[i]} ${Math.round(s * 100)}%</div>`).join('');
-    const sv = global.Save && Save.data;
-    if (sv) {
-      const day = sv.daily.d === Save.today() ? sv.daily : { best: 0 }, earned = G.bankedRun || 0;
-      el.cwallet.textContent = (earned ? '+' + money(earned) + ' banked · ' : '') + 'wallet ' + money(sv.wallet) + (day.best ? ' · today ' + money(day.best) : '');
-    }
+    el.cwallet.textContent = '';
     el.verdict.textContent = sentence(sm.verdict); el.tip.textContent = sentence(sm.tip);
   }
   global.HUD = H;

@@ -1,20 +1,23 @@
-/* SIGNAL LOST — procedural WebAudio: trap/hip-hop soundtrack + clean SFX (no assets).
-   Menu = calm loop. In-game = beat + 808 + moody chords; layers rise with wanted stars (1..5). */
+/* SIGNAL LOST — procedural WebAudio: eight ORIGINAL Afrobeats / Amapiano / Afropop tracks (no samples, no copyrighted songs),
+   clean SFX, and character voice lines (real mp3s in assets/voice/, speechSynthesis fallback) that duck the music.
+   Menu = calm loop. In-game = full groove; layers rise with the city's threat level (1..5). A different track every restart. */
 (function (global) {
   'use strict';
+  // exponential ramps throw on a target of 0 (e.g. when a volume multiplier is 0): clamp to a tiny positive value
+  try { const AP = global.AudioParam && global.AudioParam.prototype; if (AP && !AP.__slSafe) { const f = AP.exponentialRampToValueAtTime; AP.exponentialRampToValueAtTime = function (v, t) { return f.call(this, (v > 1e-4 ? v : 1e-4), t); }; AP.__slSafe = true; } } catch (e) {}
   const A = {
     ctx: null, enabled: true, muted: false, musicEnabled: true, sfxEnabled: true, volume: 0.85,
-    mode: 'menu', stars: 1, speedR: 0, playing: false, blind: false, timer: null
+    mode: 'menu', stars: 1, speedR: 0, playing: false, blind: false, timer: null, voiceEnabled: true
   };
   try { A.muted = localStorage.getItem('sl_muted') === '1'; } catch (e) {}
   let E = null; // active engine (live, or an offline one while rendering)
-  const MUSV = 0.19;
+  const MUSV = 0.21;
   const mf = n => 440 * Math.pow(2, (n - 69) / 12);
   const now = () => (E.t0 !== undefined ? E.t0 : E.c.currentTime);
 
   /* ------------------------------------------------------------ engine graph */
   function makeEngine(c) {
-    const e = { c, step: 0, nextT: 0, tier: 1, pendTier: 1, mode: A.mode, tempo: 136, t0: undefined };
+    const e = { c, step: 0, nextT: 0, tier: 1, pendTier: 1, mode: A.mode, tempo: (A.track ? A.track.bpm : 100), t0: undefined };
     const G = (v, to) => { const g = c.createGain(); g.gain.value = v; if (to) g.connect(to); return g; };
     const F = (type, f, q, to) => { const b = c.createBiquadFilter(); b.type = type; b.frequency.value = f; if (q) b.Q.value = q; if (to) b.connect(to); return b; };
     e.master = G(A.muted ? 0 : A.volume);
@@ -27,7 +30,9 @@
     e.musLP = F('lowpass', 16000, 0.5, e.musOut);
     e.dry = G(1, e.musLP);
     e.radio = F('bandpass', 1400, 0.7); e.wet = G(0, e.musLP); e.radio.connect(e.wet);
-    e.musBus = G(MUSV); e.musBus.connect(e.dry); e.musBus.connect(e.radio);
+    e.duckG = G(1); e.duckG.connect(e.dry); e.duckG.connect(e.radio);   // voice-over ducking lives here, apart from SFX ducks
+    e.musBus = G(MUSV, e.duckG);
+    e.voiceBus = G(1.25, e.master);
     e.drumBus = G(1, e.musBus); e.padBus = G(1, e.musBus); e.leadBus = G(1, e.musBus);
     // 808 bus: soft saturation adds harmonics so the sub is audible on phone speakers
     const ws = c.createWaveShaper(), cur = new Float32Array(1025);
@@ -126,64 +131,143 @@
     for (const n of notes) { const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mf(n + 12); o.detune.value = n % 2 ? 6 : -6; o.connect(lp); o.start(t); o.stop(t + 0.27); }
   }
 
-  /* ------------------------------------------------------------ song data (A minor: Am | F | C | G) */
-  const ROOT = [33, 29, 36, 31];
-  const CHORD = [[57, 60, 64, 67], [53, 57, 60, 64], [52, 55, 60, 64], [50, 55, 59, 62]];
-  const BASS_P = [
-    [[0, 0, 12]],
-    [[0, 0, 6], [10, 0, 4]],
-    [[0, 0, 3], [6, 0, 2], [10, 0, 3], [14, 12, 2]],
-    [[0, 0, 3], [3, 0, 1], [6, 0, 2], [10, 0, 2], [12, 7, 1], [14, 0, 2]],
-    [[0, 0, 2], [3, 0, 1], [4, 12, 1], [6, 0, 2], [8, 0, 2], [11, 0, 1], [12, 7, 2], [14, 0, 1], [15, 12, 1]],
-    [[0, 0, 2], [3, 0, 1], [4, 12, 1], [6, 0, 2], [8, 0, 2], [10, 7, 1], [11, 0, 1], [12, 7, 2], [14, 0, 1], [15, 12, 1]]
+  /* ------------------------------------------------------------ more instruments (afrobeats / amapiano / afropop) */
+  function logdrum(t, midi, dur, v) {            // the amapiano "log drum": a pitched, woody sine with a fast pitch dive
+    const c = E.c, f = mf(midi), o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(f * 1.9, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.05);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.9 * v, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(E.bassBus); o.start(t); o.stop(t + dur + 0.04);
+    tone(f * 2.01, 0.1, 'triangle', 0.16 * v, { t, bus: E.bassBus });
+    noise(0.012, 0.1 * v, { t, f: 1800, q: 1.5, bus: E.drumBus });
+  }
+  function shaker(t, v) { noise(0.045, 0.13 * v, { t, f: 7200, type: 'highpass', q: 0.6, atk: 0.006, bus: E.drumBus, pan: 0.25 }); }
+  function rim(t, v) { tone(1750, 0.03, 'triangle', 0.11 * v, { t, bus: E.drumBus }); noise(0.02, 0.1 * v, { t, f: 2800, q: 2, bus: E.drumBus }); }
+  function conga(t, hi, v) { const f = hi ? 330 : 240; tone(f, 0.14, 'sine', 0.2 * v, { t, slide: f * 0.78, bus: E.drumBus, pan: hi ? -0.25 : 0.25 }); noise(0.015, 0.07 * v, { t, f: 3000, q: 1.2, bus: E.drumBus }); }
+  function snare(t, v) { noise(0.12, 0.3 * v, { t, f: 2100, q: 0.7, bus: E.drumBus, send: 0.15 }); tone(200, 0.08, 'triangle', 0.2 * v, { t, slide: 150, bus: E.drumBus }); }
+  function guitar(t, midi, v) {                  // highlife-style palm-muted plucked guitar
+    const c = E.c, lp = c.createBiquadFilter(), g = c.createGain(); lp.type = 'lowpass'; lp.Q.value = 1.2;
+    lp.frequency.setValueAtTime(3400, t); lp.frequency.exponentialRampToValueAtTime(600, t + 0.18);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.13 * v, t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    lp.connect(g); g.connect(E.leadBus); const s = c.createGain(); s.gain.value = 0.3; g.connect(s); s.connect(E.send);
+    for (const d of [-5, 5]) { const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mf(midi); o.detune.value = d; o.connect(lp); o.start(t); o.stop(t + 0.26); }
+  }
+  function marimba(t, midi, dur, v) {
+    tone(mf(midi), Math.min(0.5, dur), 'sine', 0.22 * v, { t, bus: E.leadBus, send: 0.35, atk: 0.003 });
+    tone(mf(midi) * 4, 0.07, 'sine', 0.09 * v, { t, bus: E.leadBus }); tone(mf(midi) * 10, 0.025, 'sine', 0.025 * v, { t, bus: E.leadBus });
+  }
+  function whistle(t, midi, dur, v) {
+    const c = E.c, o = c.createOscillator(), lfo = c.createOscillator(), lg = c.createGain(), g = c.createGain();
+    o.type = 'sine'; o.frequency.value = mf(midi); lfo.frequency.value = 5.6; lg.gain.value = mf(midi) * 0.012; lfo.connect(lg); lg.connect(o.frequency);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.07 * v, t + 0.05); g.gain.setValueAtTime(0.07 * v, t + dur * 0.7); g.gain.linearRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(E.leadBus); const s = c.createGain(); s.gain.value = 0.5; g.connect(s); s.connect(E.send);
+    o.start(t); lfo.start(t); o.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05);
+  }
+  function keys(t, notes, dur, v) {              // soft electric-piano stab: sine + tine, decays naturally
+    notes.forEach((n, i) => { const f = mf(n); tone(f, dur, 'sine', 0.085 * v, { t: t + i * 0.006, bus: E.padBus, send: 0.3, atk: 0.006 }); tone(f * 2, dur * 0.4, 'triangle', 0.025 * v, { t, bus: E.padBus }); });
+  }
+
+  /* ------------------------------------------------------------ the tracks: all original, generated live, no samples */
+  const CH = { m7: [0, 3, 7, 10], maj7: [0, 4, 7, 11], dom: [0, 4, 7, 10], add9: [0, 4, 7, 14] };
+  const MIN = [0, 3, 5, 7, 10], MAJ = [0, 2, 4, 7, 9];
+  const pent = (root, scale, d) => root + Math.floor(d / 5) * 12 + scale[((d % 5) + 5) % 5];
+  // style patterns (16th-note steps). kick/clap lists are per intensity tier 1..5.
+  const STYLES = {
+    afrobeats: {
+      swing: 0.07, kick: [[], [0, 10], [0, 7, 10], [0, 7, 10], [0, 7, 10, 13], [0, 3, 7, 10, 13]], clap: [4, 12], rim: [0, 3, 6, 10, 12], conga: [3, 6, 9, 11, 14],
+      bass: [[[0, 0, 12]], [[0, 0, 6], [10, 0, 4]], [[0, 0, 3], [3, 0, 2], [6, 7, 2], [10, 0, 3], [13, 12, 2]], [[0, 0, 3], [3, 0, 2], [6, 7, 2], [10, 0, 3], [13, 12, 2]],
+             [[0, 0, 2], [3, 0, 2], [6, 7, 2], [8, 0, 1], [10, 0, 2], [13, 12, 1], [14, 7, 1]], [[0, 0, 2], [3, 0, 2], [6, 7, 2], [8, 0, 1], [10, 0, 2], [13, 12, 1], [14, 7, 1]]],
+      guitar: [0, 3, 6, 10, 12, 14]
+    },
+    amapiano: {
+      swing: 0.12, kick: [[], [0, 8], [0, 4, 8, 12], [0, 4, 8, 12], [0, 4, 8, 12], [0, 4, 8, 12]], clap: [4, 12], rim: [], conga: [],
+      log: [[[0, 0, 12]], [[0, 0, 4], [6, 7, 3]], [[0, 0, 3], [3, 7, 1], [6, 0, 2], [10, 0, 2], [14, 7, 2]], [[0, 0, 3], [3, 7, 1], [6, 0, 2], [10, 0, 2], [13, 12, 1], [14, 7, 2]],
+            [[0, 0, 3], [3, 7, 1], [6, 0, 2], [8, 12, 1], [10, 0, 2], [13, 12, 1], [14, 7, 2]], [[0, 0, 3], [3, 7, 1], [6, 0, 2], [8, 12, 1], [10, 0, 2], [13, 12, 1], [14, 7, 2]]],
+      keys: [0, 3, 6, 10, 14]
+    },
+    afropop: {
+      swing: 0.04, kick: [[], [0, 8], [0, 8, 10], [0, 8, 10], [0, 3, 8, 10, 13], [0, 3, 8, 10, 13]], clap: [4, 12], rim: [], conga: [],
+      bass: [[[0, 0, 12]], [[0, 0, 6], [8, 0, 4]], [[0, 0, 4], [4, 0, 2], [6, 7, 2], [8, 0, 4], [12, 12, 2], [14, 7, 2]], [[0, 0, 4], [4, 0, 2], [6, 7, 2], [8, 0, 4], [12, 12, 2], [14, 7, 2]],
+             [[0, 0, 3], [4, 0, 2], [6, 7, 2], [8, 0, 3], [12, 12, 2], [14, 7, 2]], [[0, 0, 3], [4, 0, 2], [6, 7, 2], [8, 0, 3], [12, 12, 2], [14, 7, 2]]],
+      guitar: [0, 2, 4, 6, 8, 10, 12, 14]
+    }
+  };
+  // chords: [root midi (octave 3/4), quality]; mel: per bar [step, pentatonic degree, length in steps]
+  const TRACKS = [
+    { name: 'Eko Nights', style: 'afrobeats', bpm: 100, scale: MIN, mroot: 69, prog: [[57, 'm7'], [53, 'maj7'], [60, 'maj7'], [55, 'dom']],
+      mel: [[[0, 4, 3], [4, 3, 2], [6, 2, 4], [12, 3, 3]], [[0, 2, 3], [4, 3, 3], [8, 4, 4], [14, 3, 2]], [[0, 4, 2], [3, 5, 3], [8, 4, 3], [12, 2, 4]], [[0, 3, 3], [4, 2, 2], [8, 0, 4], [12, 2, 3]]] },
+    { name: 'Jollof Sunrise', style: 'afropop', bpm: 108, scale: MAJ, mroot: 72, prog: [[60, 'maj7'], [57, 'm7'], [53, 'maj7'], [55, 'dom']],
+      mel: [[[0, 4, 4], [4, 3, 2], [6, 2, 4], [12, 4, 4]], [[0, 3, 3], [4, 2, 3], [8, 0, 4], [14, 2, 2]], [[0, 2, 4], [4, 3, 2], [8, 4, 6]], [[0, 5, 3], [4, 4, 2], [8, 3, 4], [12, 2, 4]]] },
+    { name: 'Danfo Dreams', style: 'amapiano', bpm: 112, scale: MIN, mroot: 74, prog: [[62, 'm7'], [58, 'maj7'], [65, 'maj7'], [60, 'dom']],
+      mel: [[[0, 3, 2], [3, 4, 3], [8, 3, 2], [12, 2, 4]], [[0, 4, 3], [4, 3, 2], [8, 2, 4], [14, 3, 2]], [[0, 5, 4], [6, 4, 2], [8, 3, 3], [12, 4, 4]], [[0, 3, 2], [4, 2, 2], [8, 0, 4], [12, 1, 4]]] },
+    { name: 'Marina Lights', style: 'amapiano', bpm: 110, scale: MIN, mroot: 67, prog: [[55, 'm7'], [63, 'maj7'], [58, 'maj7'], [53, 'dom']],
+      mel: [[[2, 4, 3], [6, 3, 2], [10, 2, 3], [14, 3, 2]], [[0, 4, 4], [6, 5, 2], [8, 4, 4], [14, 3, 2]], [[0, 3, 3], [4, 4, 3], [8, 5, 4], [14, 4, 2]], [[0, 3, 4], [6, 2, 2], [8, 1, 4], [12, 2, 4]]] },
+    { name: 'Ajebo Anthem', style: 'afropop', bpm: 106, scale: MAJ, mroot: 67, prog: [[55, 'add9'], [64, 'm7'], [60, 'maj7'], [62, 'dom']],
+      mel: [[[0, 5, 3], [4, 4, 3], [8, 3, 4], [12, 4, 4]], [[0, 3, 4], [4, 4, 2], [8, 3, 3], [12, 1, 4]], [[0, 2, 3], [4, 3, 3], [8, 4, 4], [12, 5, 3]], [[0, 4, 4], [6, 3, 2], [8, 2, 4], [12, 1, 4]]] },
+    { name: 'Agbero Groove', style: 'afrobeats', bpm: 98, scale: MIN, mroot: 64, prog: [[64, 'm7'], [60, 'maj7'], [55, 'add9'], [62, 'dom']],
+      mel: [[[0, 2, 3], [4, 3, 2], [8, 4, 3], [12, 3, 4]], [[0, 4, 4], [6, 3, 2], [8, 2, 4], [14, 1, 2]], [[0, 3, 3], [3, 4, 3], [8, 5, 4], [12, 4, 2]], [[0, 2, 4], [6, 1, 2], [8, 0, 4], [12, 1, 3]]] },
+    { name: 'Lekki Heat', style: 'amapiano', bpm: 114, scale: MIN, mroot: 72, prog: [[60, 'm7'], [56, 'maj7'], [63, 'maj7'], [58, 'dom']],
+      mel: [[[0, 4, 2], [3, 3, 3], [8, 4, 2], [12, 5, 4]], [[0, 3, 3], [4, 2, 3], [8, 3, 4], [14, 4, 2]], [[0, 5, 2], [3, 4, 3], [8, 3, 4], [12, 2, 4]], [[0, 4, 3], [4, 3, 2], [8, 2, 4], [14, 0, 2]]] },
+    { name: 'Naija Pride', style: 'afropop', bpm: 110, scale: MAJ, mroot: 74, prog: [[62, 'add9'], [59, 'm7'], [55, 'maj7'], [57, 'dom']],
+      mel: [[[0, 4, 3], [4, 5, 3], [8, 4, 4], [12, 3, 4]], [[0, 3, 4], [6, 4, 2], [8, 3, 4], [12, 2, 4]], [[0, 2, 3], [4, 3, 3], [8, 4, 4], [12, 3, 4]], [[0, 4, 4], [6, 3, 2], [8, 2, 4], [12, 0, 4]]] }
   ];
-  const KICK_P = [[0], [0, 10], [0, 7, 10], [0, 3, 7, 10], [0, 3, 7, 10, 13], [0, 3, 7, 10, 12, 14]];
-  const LEAD = [
-    [[0, 81, 6], [6, 79, 2], [8, 76, 6], [14, 79, 2]],
-    [[0, 77, 6], [6, 76, 2], [8, 72, 6], [12, 76, 2]],
-    [[0, 76, 4], [4, 79, 4], [8, 84, 4], [12, 83, 2], [14, 79, 2]],
-    [[0, 79, 6], [6, 74, 2], [8, 74, 4], [12, 71, 4]]
-  ];
-  const ARP = [0, 2, 1, 3, 2, 1, 3, 2];
-  const HAT16 = [1, 0.3, 0.6, 0.3];
+  A.TRACKS = TRACKS.map(t => ({ name: t.name, style: t.style, bpm: t.bpm }));
+  let trackIdx = 0, lastTrack = -1;
+  try { lastTrack = +localStorage.getItem('sl_lasttrack'); if (!(lastTrack >= 0)) lastTrack = -1; } catch (e) {}
+  const pickIdx = avoid => { let i; do { i = Math.floor(Math.random() * TRACKS.length); } while (TRACKS.length > 1 && i === avoid); return i; };
+  trackIdx = pickIdx(lastTrack);
+  A.track = TRACKS[trackIdx]; A.trackName = A.track.name; A.trackIdx = trackIdx;
+  A.setTrack = function (i) {
+    trackIdx = ((i % TRACKS.length) + TRACKS.length) % TRACKS.length; A.track = TRACKS[trackIdx]; A.trackName = A.track.name; A.trackIdx = trackIdx;
+    try { localStorage.setItem('sl_lasttrack', String(trackIdx)); } catch (e) {}
+    if (E) { E.step = 0; E.tier = E.pendTier = 1; E.tempo = A.track.bpm; if (A.playing) E.nextT = Math.max(E.nextT, E.c.currentTime + 0.05); }
+    return A.trackName;
+  };
+  A.nextTrack = function () { return A.setTrack(pickIdx(trackIdx)); };       // a different song every restart
 
   function scheduleStep(e) {
-    const t = e.nextT, s = e.step, st = s & 15, bar = (s >> 4) & 3, c = e.c;
+    const T = A.track, ST = STYLES[T.style], t0 = e.nextT, s = e.step, st = s & 15, bar = (s >> 4) & 3;
     if (st === 0) e.tier = e.pendTier;
-    const menu = e.mode === 'menu', tier = menu ? 0 : e.tier, last = bar === 3;
-    const base = menu ? 84 : 136 + (tier >= 5 ? 6 : 0) + A.speedR * 6;
+    const menu = e.mode === 'menu', tier = menu ? 0 : e.tier, last = bar === 3, ti = Math.max(1, tier);
+    const base = menu ? T.bpm * 0.9 : T.bpm + A.speedR * 5 + (tier >= 5 ? 3 : 0);
     e.tempo += (base - e.tempo) * 0.25;
-    const sp = 60 / e.tempo / 4;
+    const sp = 60 / e.tempo / 4, t = t0 + (st & 1 ? ST.swing * sp : 0);
     e.dly.delayTime.value = sp * 3;
-    // chords
-    if (st === 0) pad(t, CHORD[bar], sp * 16, menu ? 1300 : [900, 900, 1200, 1500, 1800, 2200][tier], menu ? 0.085 : tier >= 4 ? 0.06 : 0.075);
+    const ch = T.prog[bar], notes = CH[ch[1]].map(n => ch[0] + n), root = ch[0] - 24;
+    // chords: warm pad that opens up with intensity
+    if (st === 0) pad(t0, notes, sp * 16, menu ? 1000 : [900, 900, 1100, 1400, 1700, 2000][tier], menu ? 0.07 : 0.055);
     // drums
-    const kv = menu ? 0.6 : 0.85;
-    if (KICK_P[tier].indexOf(st) >= 0) kick(t, kv);
-    if (last && tier >= 3 && st === 15) kick(t, 0.7);
-    if (menu ? st === 8 : tier >= 2 && st === 8) clap(t, menu ? 0.45 : 0.8);
-    if (tier >= 4 && (st === 14 || (last && st >= 12))) clap(t, last && st >= 12 ? 0.35 + (st - 12) * 0.1 : 0.3);
-    // hats
-    if (menu) { if (st % 2 === 0) hat(t, 0.28 + (st % 4 === 0 ? 0.12 : 0)); }
-    else if (tier === 1) { if (st % 4 === 2) hat(t, 0.4); }
-    else if (tier === 2) { if (st % 2 === 0) hat(t, st % 4 === 0 ? 0.55 : 0.4); if (st === 6 || st === 14) hat(t, 0.45, true); }
-    else {
-      hat(t, 0.5 * HAT16[st & 3] + 0.12, (st === 6 || st === 14) && tier >= 3 && !(last && st === 14));
-      if ((bar & 1) && st >= 12 && st % 2 === 0) hat(t + sp * 0.5, 0.42); // 32nd roll
-      if (tier >= 5 && st >= 14) hat(t + sp * 0.5, 0.4);
-      if (tier >= 4 && last && st === 13) hat(t + sp * 0.33, 0.4), hat(t + sp * 0.66, 0.4);
+    const kp = ST.kick[ti]; if (!menu && kp.indexOf(st) >= 0) kick(t0, 0.82); else if (menu && st === 0) kick(t0, 0.5);
+    if (last && tier >= 3 && st === 15) kick(t0, 0.6);
+    if (tier >= 2 && ST.clap.indexOf(st) >= 0) (T.style === 'afrobeats' ? snare : clap)(t0, 0.72);
+    if (tier >= 4 && last && st >= 12 && st % 2 === 0) snare(t0, 0.25 + (st - 12) * 0.08);
+    // shakers & hats
+    if (menu) { if (st % 4 === 2) shaker(t, 0.5); }
+    else if (T.style === 'amapiano') { shaker(t, tier >= 2 ? (st % 4 === 2 ? 0.9 : 0.55) : st % 4 === 2 ? 0.6 : 0); if (tier >= 2 && st % 4 === 2) hat(t, 0.4, st === 6 || st === 14); }
+    else { if (tier >= 3 || st % 2 === 0) shaker(t, (st % 4 === 2 ? 0.85 : 0.5)); if (tier >= 2 && st % 4 === 2) hat(t, 0.35, st === 14); }
+    if (T.style === 'afrobeats' && tier >= 3) { if (ST.rim.indexOf(st) >= 0) rim(t0, 0.6); const ci = ST.conga.indexOf(st); if (ci >= 0) conga(t, ci % 2 === 0, 0.7); }
+    // bass / log drum
+    if (T.style === 'amapiano') {
+      const lp = ST.log[menu ? 0 : tier];
+      for (let i = 0; i < lp.length; i++) if (lp[i][0] === st) logdrum(t, root + 12 + lp[i][1], lp[i][2] * sp * 1.3, menu ? 0.6 : 1.35);
+      if (tier >= 2 && st === 0) bass(t0, root, sp * 5, 0.8);
+    } else {
+      const bp = ST.bass[menu ? 0 : tier];
+      for (let i = 0; i < bp.length; i++) if (bp[i][0] === st) bass(t, root + bp[i][1], bp[i][2] * sp, menu ? 0.5 : 1);
     }
-    // 808
-    const bp = BASS_P[menu ? 0 : tier];
-    for (let i = 0; i < bp.length; i++) if (bp[i][0] === st) bass(t, ROOT[bar] + bp[i][1], bp[i][2] * sp, menu ? 0.55 : 1);
-    // pluck arp
-    if (!menu && tier >= 3 && (st % 2 === 0 || tier >= 5)) pluck(t, CHORD[bar][ARP[(st >> 1) & 7] % 4] + 12 + (st % 2 ? 12 : 0), tier >= 4 ? 0.9 : 0.7);
-    // bells / lead
-    if (menu || tier >= 4) {
-      const L = LEAD[bar];
-      for (let i = 0; i < L.length; i++) if (L[i][0] === st && (!menu || i % 2 === 0)) bell(t, L[i][1] - (menu ? 0 : 0), L[i][2] * sp * 0.9, menu ? 0.55 : 0.8);
+    // rhythm instrument: keys stabs (amapiano) / guitar (afrobeats, afropop)
+    if (T.style === 'amapiano') { if (tier >= 2 && ST.keys.indexOf(st) >= 0 && !(tier < 4 && st === 14)) keys(t, notes.slice(0, 4), sp * 3.2, 1.2); }
+    else if ((T.style === 'afrobeats' && tier >= 3) || (T.style === 'afropop' && tier >= 2)) {
+      const gi = ST.guitar.indexOf(st); if (gi >= 0) guitar(t, notes[[0, 2, 1, 3, 2, 1, 3, 2][gi % 8] % 4] + 12 + (gi % 3 === 2 ? 12 : 0), 0.8);
     }
-    if (!menu && tier >= 5 && (st === 0 || st === 6 || st === 10)) stab(t, CHORD[bar].slice(0, 3), 1);
+    // melody (marimba, with a whistle on top for the amapiano tracks at full intensity)
+    if (menu || tier >= 4 || (T.style === 'afropop' && tier >= 3)) {
+      const L = T.mel[bar];
+      for (let i = 0; i < L.length; i++) if (L[i][0] === st && (!menu || i % 2 === 0)) {
+        const m = pent(T.mroot, T.scale, L[i][1]);
+        marimba(t, m, L[i][2] * sp, menu ? 0.6 : 0.85);
+        if (tier >= 5 && T.style === 'amapiano' && (bar & 1)) whistle(t, m + 12, L[i][2] * sp * 1.2, 0.8);
+      }
+    }
     e.step++; e.nextT += sp;
   }
   function pump() {
@@ -214,7 +298,7 @@
     const t = E.c.currentTime;
     if (m === 'over') { E.musLP.frequency.cancelScheduledValues(t); E.musLP.frequency.setTargetAtTime(520, t, 0.12); E.pendTier = 1; return; }
     E.musLP.frequency.cancelScheduledValues(t); E.musLP.frequency.setTargetAtTime(16000, t, 0.25);
-    if ((prev === 'menu') !== (m === 'menu')) { E.mode = m; E.step = 0; E.tier = E.pendTier = 1; if (A.playing) E.nextT = Math.max(E.nextT, t + 0.05); }
+    if ((prev === 'menu') !== (m === 'menu')) { E.mode = m; E.step = 0; E.tier = E.pendTier = 1; E.tempo = A.track.bpm; if (A.playing) E.nextT = Math.max(E.nextT, t + 0.05); }
     else E.mode = m;
   };
   A.setIntensity = function (threat, speedRatio) {
@@ -290,17 +374,99 @@
     o.start(t); lfo.start(t); o.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05);
   });
 
+
+  /* ------------------------------------------------------------ character voice-overs */
+  const VOICE_TEXT = {
+    st01: "Welcome to Lagos Island! Let's go!", st02: 'Third Mainland Bridge! Beautiful view. Keep it moving!', st03: 'Lekki toll, night shift! Stay sharp!',
+    st04: 'Ikeja Market! Watch the crowd, and grab that cash!', st05: 'Abuja Boulevard! Smooth roads, fast courier!', st06: 'Harbour docks! Dodge those containers!',
+    st07: 'Desert highway! Hot road, cool courier!', st08: 'Rainy industrial zone! Keep your grip!', st09: 'Savanna sunset! Beautiful. Now run!',
+    st10: 'Victoria Island, midnight! The city is yours!', start: "Back on the road! Let's go, courier!", mission1: 'Mission complete! Nice one!',
+    mission2: 'Another one done! You are a legend!', word1: 'You spelled it! Big bonus!', word2: 'Word complete! Cash for you!', daily: 'Daily challenge complete! Well done!',
+    best: 'New personal best! Congratulations!', crash: 'Ah ah! Try again, you can do it!', rival: 'You beat the rival! Sweet!', ramp: 'Fly, courier!', boost: 'Turbo! Hold on tight!'
+  };
+  Object.assign(VOICE_TEXT, {"c_courier_s": "Tunde on dispatch! Let's make that money!", "c_courier_g": "Easy! Keep it moving, boss!", "c_danfo_s": "Bisi, Danfo! Enter, enter! We dey go!", "c_danfo_g": "Who has change? I have change!", "c_sparks_s": "Chidi, Sparks! I can fix anything. Even this signal!", "c_sparks_g": "No wahala, I got this one!", "c_ankara_s": "Amaka, Ankara! Fresh from Balogun. Make we go!", "c_ankara_g": "Look at those letters! Come to mama!", "c_bolt_s": "Lagos Bolt on the track! Catch me if you can!", "c_bolt_g": "Is that all you got? I am just warming up!", "c_sultan_s": "Salaam! Alhaji Musa is on the road. Calm and steady!", "c_sultan_g": "Slowly, slowly. We still get there first!", "c_agbero_s": "Agbero Boss in the building! Everybody make way!", "c_agbero_g": "Una dey try! But nobody touches me!", "c_okada_s": "Ayo, Okada! Hold tight, we are flying!", "c_okada_g": "Who needs a road? I make my own!", "c_shadow_s": "They never see me coming. Let's go!", "c_shadow_g": "Quiet, quiet. The shadows are mine!", "c_scholar_s": "Professor Adaeze is in session. Class, let's spell!", "c_scholar_g": "Knowledge is power. And cash too!"});   // per-character lines
+  const vbuf = {}, vload = {}, VBASE = 'assets/voice/';
+  let vcur = null, vseq = 0, vlast = {}, vfail = false;
+  function loadVoice(id) {
+    if (vbuf[id]) return Promise.resolve(vbuf[id]);
+    if (vload[id]) return vload[id];
+    if (vfail || !A.ctx) return Promise.resolve(null);
+    return (vload[id] = fetch(VBASE + id + '.mp3').then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+      .then(ab => new Promise((res, rej) => A.ctx.decodeAudioData(ab, res, rej))).then(b => (vbuf[id] = b))
+      .catch(() => { delete vload[id]; vfail = true; return null; }));
+  }
+  A.preloadVoice = function (only) {
+    const ids = only || Object.keys(VOICE_TEXT).filter(k => k.slice(0, 2) !== 'c_'); let i = 0;
+    const next = () => { if (i >= ids.length || vfail) return; loadVoice(ids[i++]).then(() => setTimeout(next, 60)); };
+    next();
+  };
+  function duckFor(secs) {                       // dip the music while someone is talking
+    if (!E) return; const g = E.duckG.gain, t = E.c.currentTime;
+    g.cancelScheduledValues(t); g.setTargetAtTime(0.34, t, 0.06); g.setTargetAtTime(1, t + secs + 0.15, 0.3);
+  }
+  function unduck() { if (!E) return; const g = E.duckG.gain, t = E.c.currentTime; g.cancelScheduledValues(t); g.setTargetAtTime(1, t, 0.25); }
+  function speakFallback(id, seq) {
+    const ss = global.speechSynthesis; if (!ss || !global.SpeechSynthesisUtterance || !VOICE_TEXT[id]) return false;
+    try {
+      const u = new SpeechSynthesisUtterance(VOICE_TEXT[id]); u.pitch = 1.4; u.rate = 1.12; u.volume = 1; u.lang = 'en-NG';
+      const vs = ss.getVoices ? ss.getVoices() : [];
+      const v = vs.find(x => /en[-_]NG/i.test(x.lang)) || vs.find(x => /en[-_](GB|ZA|IN)/i.test(x.lang) && /female|zira|samantha|hazel|susan|libby|sonia/i.test(x.name)) || vs.find(x => /^en/i.test(x.lang));
+      if (v) u.voice = v;
+      u.onstart = () => duckFor(2.5);
+      u.onend = u.onerror = () => { if (vcur && vcur.seq === seq) { vcur = null; unduck(); } };
+      ss.cancel(); ss.speak(u); vcur = { prio: vcur ? vcur.prio : 1, seq, speech: true, end: performance.now() + 4000 };
+      return true;
+    } catch (e) { return false; }
+  }
+  A.setVoiceEnabled = function (on) { A.voiceEnabled = !!on; if (!on) A.stopVoice(); };
+  A.stopVoice = function () {
+    if (vcur) { try { if (vcur.src) vcur.src.stop(); } catch (e) {} if (vcur.speech) try { global.speechSynthesis.cancel(); } catch (e) {} vcur = null; unduck(); }
+  };
+  /* say(id, priority): stage lines outrank pickups; a lower-priority line never talks over a higher one; per-id cooldown stops spam */
+  A.say = function (id, prio, cooldown) {
+    if (!A.voiceEnabled || A.muted || !E || !A.ctx || E.t0 !== undefined) return false;
+    prio = prio || 1; const nowMs = performance.now();
+    if (cooldown && vlast[id] && nowMs - vlast[id] < cooldown * 1000) return false;
+    if (vcur && vcur.end > nowMs && vcur.prio >= prio) return false;
+    if (vcur) A.stopVoice();
+    vlast[id] = nowMs; const seq = ++vseq; vcur = { prio, seq, end: nowMs + 4000 };
+    const buf = vbuf[id];
+    const play = b => {
+      if (!vcur || vcur.seq !== seq) return;
+      if (!b) { if (!speakFallback(id, seq)) vcur = null; else vcur.prio = prio; return; }
+      const c = E.c, src = c.createBufferSource(); src.buffer = b; src.connect(E.voiceBus); src.start(c.currentTime + 0.02);
+      vcur.src = src; vcur.end = nowMs + b.duration * 1000 + 100; duckFor(b.duration);
+      src.onended = () => { if (vcur && vcur.seq === seq) vcur = null; };
+    };
+    if (buf) play(buf); else loadVoice(id).then(play);
+    return true;
+  };
+  A.voiceBusy = () => !!(vcur && vcur.end > performance.now());
+
+  /* ------------------------------------------------------------ SFX for the new road features */
+  A.stage = S(function () { // stage change: a rising sweep + warm chime, under the voice line
+    noise(0.9, 0.1, { f: 400, fTo: 5000, q: 1, atk: 0.4, send: 0.3 });
+    [523.3, 659.3, 784, 1046.5].forEach((f, i) => tone(f, 0.55, 'sine', 0.08, { delay: 0.1 + i * 0.09, send: 0.35 }));
+  });
+  A.letter = S(function (i) { const f = 880 * Math.pow(2, [0, 2, 4, 7, 9, 12][(i || 0) % 6] / 12); tone(f, 0.35, 'sine', 0.13, { send: 0.3 }); tone(f * 2, 0.2, 'triangle', 0.05); });
+  A.word = S(function () { [523.3, 659.3, 784, 1046.5, 1318.5].forEach((f, i) => tone(f, 0.6, 'sine', 0.1, { delay: i * 0.08, send: 0.35 })); noise(0.3, 0.07, { f: 6000, type: 'highpass', delay: 0.3 }); });
+  A.mission = S(function () { [659.3, 830.6, 987.8].forEach((f, i) => tone(f, 0.45, 'sine', 0.1, { delay: i * 0.1, send: 0.3 })); tone(165, 0.3, 'sine', 0.18, { slide: 110 }); });
+  A.boost = S(function () { noise(0.7, 0.2, { f: 300, fTo: 5200, q: 0.9, atk: 0.12 }); tone(110, 0.6, 'sawtooth', 0.06, { slide: 330, atk: 0.1 }); });
+  A.ramp = S(function () { tone(180, 0.35, 'sine', 0.2, { slide: 520, atk: 0.02 }); noise(0.4, 0.14, { f: 600, fTo: 3600, q: 1, atk: 0.1 }); });
+  A.x2 = S(function () { [784, 1175, 1568].forEach((f, i) => tone(f, 0.3, 'sine', 0.1, { delay: i * 0.06, send: 0.3 })); });
+  A.daily = S(function () { [523.3, 659.3, 784, 1046.5, 1568].forEach((f, i) => tone(f, 0.7, 'sine', 0.09, { delay: i * 0.1, send: 0.4 })); });
+
   /* ------------------------------------------------------------ offline rendering (tests: level + tempo analysis) */
   A.renderOffline = async function (secs, o) {
     o = o || {}; const OAC = global.OfflineAudioContext || global.webkitOfflineAudioContext; if (!OAC) return null;
     const sr = 22050, oc = new OAC(1, Math.ceil(sr * secs), sr), live = E, liveMode = A.mode, liveSpeed = A.speedR;
     A.mode = o.mode || 'play'; A.speedR = 0;
-    E = makeEngine(oc); E.mode = A.mode; E.tier = E.pendTier = o.tier || 3; E.nextT = 0.02;
+    const liveTrack = A.track; if (o.track !== undefined) A.track = TRACKS[o.track]; E = makeEngine(oc); E.mode = A.mode; E.tier = E.pendTier = o.tier || 3; E.nextT = 0.02;
     try {
       if (o.sfx) { for (const [i, nm] of o.sfx.entries()) { E.t0 = 0.3 + i * 1.2; A[nm[0]].apply(null, nm.slice(1)); E.t0 = undefined; } }
       else while (E.nextT < secs) scheduleStep(E);
       const buf = await oc.startRendering(); return { sr, data: Array.from(buf.getChannelData(0)) };
-    } finally { E = live; A.mode = liveMode; A.speedR = liveSpeed; }
+    } finally { E = live; A.mode = liveMode; A.speedR = liveSpeed; A.track = liveTrack; }
   };
 
   global.Sfx = A;

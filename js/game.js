@@ -9,12 +9,14 @@
   const JUMP_T = 0.62, JUMP_H = 1.7, SLIDE_T = 0.55;
   const GRAV = 8 * JUMP_H / (JUMP_T * JUMP_T), JUMP_V = GRAV * JUMP_T / 2;
   const proj = z => 1 / (1 + z / K);
+  const WALL_H = { sedan: 1.7, taxi: 1.8, police: 1.8, van: 2.5, truck: 3.4, bus: 3.4 };
+  WALL_H.undefined = 2.5;
 
   const Game = {
-    K, ZSPAWN, ZFAR, SAMPLE_Z, JUMP_T, SLIDE_T, proj,
+    K, ZSPAWN, ZFAR, SAMPLE_Z, JUMP_T, SLIDE_T, proj, GRAV, JUMP_V,
     brain: new Brain(),
     state: 'title', attract: true, god: true, bot: null,
-    clock: 0, time: 0, dist: 0, speed: 20, score: 0, coins: 0, best: 0, bestPred: 0,
+    clock: 0, time: 0, dist: 0, speed: 20, score: 0, coins: 0, best: 0, bestPts: 0, bestPred: 0,
     q: [], obs: [], coinsL: [], chips: [], blds: [[], []], boards: [], waves: [],
     parts: [], pops: [], events: [],
     fx: { shake: 0, flash: 0, glitch: 0, chroma: 0, freeze: 0, zoom: 0, hurt: 0, eyeFlash: 0, eyeMiss: 0, speedPulse: 0 },
@@ -23,8 +25,10 @@
     waveLog: [], nextChipAt: 9, lastGap: 0,
     p: null
   };
-  Game.up = { jam: 0, magnet: 0, bail: 0 }; // garage upgrade levels, set by main.js from Save before a run
-  try { Game.best = +localStorage.getItem('sl_best') || 0; Game.bestPred = +localStorage.getItem('sl_bestpred') || 0; } catch (e) {}
+  const CX = (global.Save && global.Save.CASH_X) || 12, cmp = n => global.Save ? global.Save.compact(n) : String(Math.floor(n));
+  Game.perk = {};   // equipped character's perk (set by main.js from Save before a run)
+  Game.up = { jam: 0, cash: 0, turbo: 0, bail: 0 }; // upgrade levels, set by main.js from Save before a run
+  try { Game.best = +localStorage.getItem('sl_best') || 0; /* sl_best is rescaled by Save when the save is migrated to v5 */ Game.bestPred = +localStorage.getItem('sl_bestpred') || 0; Game.bestPts = +localStorage.getItem('sl_bestpts') || 0; } catch (e) {}
 
   /* ------------------------------------------------------------ setup */
   Game.reset = function (attract, opts) {
@@ -36,7 +40,7 @@
     g.time = 0; g.dist = 0; g.speed = 20; g.score = 0; g.coins = 0; g.q.length = 0;
     g.obs = []; g.coinsL = []; g.chips = []; g.blds = [[], []]; g.boards = []; g.waves = []; g.parts = []; g.pops = [];
     g.blindT = 0; g.combo = 0; g.comboP = 0; g.comboT = 0; g.mult = 1; g.waveLog = []; g.nextChipAt = 8.5; g.nextBoardZ = 70; g.boardSide = 0;
-    g.bailUsed = false; g.bails = 0; g.jams = 0; g.jamTotal = 6.5; g.nextCoinGap = 0; g.deadT = 0; g.overT = 0; g.newBest = false; g.nearCount = 0; g.speedTier = 0;
+    g.bailUsed = false; g.autoUsed = false; g.bails = 0; g.jams = 0; g.jamTotal = 6.5; g.nextCoinGap = 0; g.deadT = 0; g.overT = 0; g.newBest = false; g.pts = 0; g.finalPts = 0; g.newBestPts = false; g.nearCount = 0; g.speedTier = 0;
     g.fx = { shake: 0, flash: opts.noflash ? 0 : 0.6, glitch: 0, chroma: 0, freeze: 0, zoom: 0, hurt: 0, eyeFlash: 0, eyeMiss: 0, speedPulse: 1 };
     g.p = { lane: 1, prevLane: 1, x: 1, y: 0, vy: 0, grounded: true, slide: 0, slideBuf: 0, jumpBuf: 0, fast: false, phase: 0,
             inv: 0, dead: false, lean: 0, inLane: [-9, -9, -9], slideStart: -9, jumpStart: -9, landT: -9, switchT: -9 };
@@ -47,6 +51,7 @@
     while (g.bz[0] < ZFAR) g.spawnBuilding(0);
     while (g.bz[1] < ZFAR) g.spawnBuilding(1);
     // pre-seeded first waves so something is incoming from second one
+    g.rampAir = false; g.featAttract = !!opts.featAttract; g.featReset(opts);
     g.spawnWave(46); g.spawnWave(76);
     g.distToNext = 100 - 76 + g.waveGap();
     g.bot = opts.bot || (attract ? { restLane: 1, dodgeDir: rnd() < 0.5 ? -1 : 1, react: 0.7, jumpAt: 0.3, wander: true } : null);
@@ -151,8 +156,9 @@
     // coins on the free lane(s) — the escape path
     if (free.length) {
       const fl = wave.mode === 'pincer' || wave.mode === 'trap' ? free[0] : free[Math.floor(rnd() * free.length)];
-      if (rnd() < 0.85) g.coinRow(fl, z - 1, 6, 2.4);
       wave.freeLane = fl;
+      g.spawnExtras(wave, z, free, fl);               // letters, ramps, turbo pads, cash tokens (features.js)
+      if (rnd() < 0.85 && !wave.noCoins) g.coinRow(fl, z - 1, 6, 2.4);
     }
     // glitch chip, placed in the free lane
     if (g.time >= g.nextChipAt && !blind && free.length) {
@@ -186,7 +192,7 @@
   Game.pushTicker = function (text) { this.ticker = { text, t: 0 }; };
   Game.shake = function (a) { this.fx.shake = Math.max(this.fx.shake, a); };
   Game.addCombo = function (n) {
-    this.comboP = (this.comboP || 0) + n; this.combo = Math.floor(this.comboP); this.comboT = 3.2;
+    this.comboP = (this.comboP || 0) + n; this.combo = Math.floor(this.comboP); this.comboT = 3.2 * (1 + (this.perk.combo || 0));
   };
   Game.playerScreen = function () {
     const R = global.Render; return R ? R.playerPos(this) : { x: 160, y: 140 };
@@ -297,12 +303,14 @@
 
     const p = g.p, br = g.brain;
     g.time += dt;
-    g.speed = g.speedAt(g.time);
+    g.featPre(dt);
+    const baseV = g.speedAt(g.time);
+    g.speed = baseV * (1 + 0.32 * g.boostK);           // turbo pads push the courier ~32% faster
     const v = g.speed, dz = v * dt;
     g.dist += dz;
     // speed tier juice
-    const tier = Math.floor((v - 20) / 5);
-    if (tier > g.speedTier) { g.speedTier = tier; fx.speedPulse = 1; g.emit('speedup'); if (!g.attract) g.pop('SPEED UP', g.W2 || 160, 62, '#19f3ff', 1, 0.9); }
+    const tier = Math.floor((baseV - 20) / 5);
+    if (tier > g.speedTier) { g.speedTier = tier; fx.speedPulse = 1; g.emit('speedup'); if (!g.attract) g.pop('SPEED UP', g.W2 || 160, 62, '#e8e2d4', 1, 0.9); }
 
     if (g.bot) g.botStep();
 
@@ -314,7 +322,7 @@
       p.vy -= GRAV * dt * (p.fast ? 2.6 : 1);
       p.y += p.vy * dt;
       if (p.y <= 0) {
-        p.y = 0; p.vy = 0; p.grounded = true; p.fast = false; p.landT = g.clock;
+        p.y = 0; p.vy = 0; p.grounded = true; p.fast = false; p.landT = g.clock; g.rampAir = false;
         g.emit('land');
         if (p.slideBuf > 0) { g.doAction('S'); }
         else if (p.jumpBuf > 0) { g.doAction('J'); }
@@ -370,7 +378,7 @@
         else if (hit === false) {
           fx.eyeMiss = 0.5;
           if (w.conf > 0.5 && !g.attract && w.mode !== 'random') {
-            g.addCombo(2); g.score += 200 * g.mult; g.pop('OUTSMARTED +' + 200 * g.mult, g.W2 || 160, 78, '#ffe14d', 1, 1.1); g.emit('outplay');
+            g.addCombo(2); g.score += CX * 200 * g.mult; g.pop('OUTSMARTED +' + cmp(CX * 200 * g.mult), g.W2 || 160, 78, '#ffe14d', 1, 1.1); g.emit('outplay');
           }
         }
       }
@@ -380,26 +388,15 @@
     // ---- collisions & near misses
     g.collide(dt);
 
-    // ---- cash magnet (garage upgrade): coins ahead in nearby lanes fly to the courier
-    if (g.up.magnet > 0 && !p.dead) {
-      const lv = g.up.magnet, rng = [0, 7, 11, 16][lv], lanes = lv >= 2 ? 1.6 : 1.1;
-      for (const c of g.coinsL) {
-        if (c.taken) continue;
-        if (!c.mag && c.z > 0.9 && c.z < rng && Math.abs(c.lane - p.x) <= lanes) c.mag = true;
-        if (c.mag) {
-          const k = 1 - Math.exp(-dt * 16);
-          c.lane += (p.x - c.lane) * k; c.y += (p.y + 0.55 - c.y) * k;
-          if (c.z > 0.4) c.z = Math.max(0.3, c.z - 30 * dt);
-        }
-      }
-    }
+    // ---- letters, ramps, pads, tokens, missions, stages (features.js)
+    g.featStep(dt, dz);
 
     // ---- pickups
     for (const c of g.coinsL) {
       if (c.taken) continue;
       if (Math.abs(c.z) < 0.9 && Math.abs(p.x - c.lane) < 0.62 && Math.abs(c.y - (p.y + 0.55)) < 0.85) {
         c.taken = true; g.coins++; g.addCombo(0.5);
-        g.score += 25 * g.mult; br.log.coins++;
+        g.score += CX * 25 * g.mult * g.coinMul * (g.x2T > 0 ? 2 : 1); br.log.coins++; g.mEvent('coins');
         const sp = g.playerScreen();
         g.burst(sp.x, sp.y - 14, 6, ['#ffe14d', '#fff7c2', '#ffb347'], 70, 0.4, 100);
         g.emit('coin');
@@ -415,8 +412,8 @@
     const pred = br.acc;
     const chaos = g.blindT > 0 ? 2 : (pred < 0.3 && br.accN >= 4) ? 2 : (pred < 0.45 && br.accN >= 4) ? 1.5 : 1;
     g.chaos = chaos;
-    g.mult = Math.min(8, 1 + Math.floor(g.combo / 4)) * chaos;
-    g.score += v * dt * 2 * g.mult;
+    g.mult = Math.min(8, 1 + Math.floor(g.combo / 4)) * chaos * (g.boostT > 0 ? 2 : 1);
+    // cash is earned only by what you pick up and pull off (no passive income); SCORE is distance-based, see G.calcPts
 
     // ---- taunts
     g.taunt.t += dt; g.ticker.t += dt;
@@ -457,11 +454,11 @@
   Game.grabChip = function () {
     const g = this, br = g.brain;
     br.blind();
-    g.jamTotal = 6.5 + 1.5 * (g.up.jam || 0); g.blindT = g.jamTotal; g.jams++; g.fx.glitch = 1; g.fx.flash = 1; g.fx.chroma = 1; g.fx.freeze = 0.07; g.shake(2.5);
+    g.jamTotal = 6.5 + 1.5 * (g.up.jam || 0) + (g.perk.jam || 0); g.blindT = g.jamTotal; g.jams++; g.fx.glitch = 1; g.fx.flash = 1; g.fx.chroma = 1; g.fx.freeze = 0.07; g.shake(2.5);
     for (const w of g.waves) w.sampled = true; // wipe pending bets
-    g.addCombo(3); g.score += 1000 * Math.max(1, g.mult);
+    g.addCombo(3); g.score += CX * 1000 * Math.max(1, g.mult); g.mEvent('jam');
     g.pop('SIGNAL JAMMED', g.W2 || 160, 66, '#ff2fb3', 2, 1.4);
-    g.pop('PREDICTIONS WIPED - SCORE x2', g.W2 || 160, 86, '#19f3ff', 1, 1.6);
+    g.pop('SIGNAL JAMMED · CASH x2', g.W2 || 160, 86, '#19f3ff', 1, 1.6);
     g.taunt.text = br.taunt({ pred: 0, blind: true, combo: g.combo }); g.taunt.t = 0; g.taunt.next = 1.6;
     g.ticker = { text: 'SIGNAL JAMMED - I CAN\'T SEE YOU', t: 0 };
     for (const b of g.boards) { b.text = g.taunt.text; b.flick = 0.6; }
@@ -480,13 +477,19 @@
       }
       if (zOverlap && inLaneNow && !p.dead) {
         let hit = false;
-        if (o.type === 'wall') hit = true;
+        if (o.type === 'wall') hit = !(g.rampAir && p.y > WALL_H[o.vis] + 0.15);     // a ramp launch can fly over traffic
         else if (o.type === 'barrier') { o.minClear = Math.min(o.minClear, p.y - o.h); hit = p.y < o.h - 0.05; }
-        else if (o.type === 'beam') { hit = !(p.slide > 0 && p.y < 0.12); if (!hit) o.slid = true; }
+        else if (o.type === 'beam') { hit = !(p.slide > 0 && p.y < 0.12) && !(g.rampAir && p.y > 2.45); if (!hit && p.slide > 0) o.slid = true; }
+        if (hit && g.cloakT > 0 && o.type === 'wall' && o.vis === 'police') hit = false;    // Shadow: police look straight through you
         if (hit && p.inv <= 0) { g.hit(o); if (p.dead) return; }
       }
       if (!o.judgedB && o.z + o.depth < -0.6) {
         o.judgedB = true;
+        if (!p.dead && !g.attract) {
+          if (o.type === 'wall' && o.vis === 'police') { g.copsDodged++; g.mEvent('cops'); }
+          else if (o.type === 'barrier' && o.minClear !== Infinity) g.mEvent('jump');
+          else if (o.type === 'beam' && o.slid) g.mEvent('slide');
+        }
         if (o.type === 'barrier' && o.minClear !== Infinity && o.minClear < 0.3 && !p.dead) g.nearMiss(o, 'jump');
         else if (o.type === 'beam' && o.slid && o.slideTTI !== null && o.slideTTI < 0.2 && !p.dead) g.nearMiss(o, 'slide');
       }
@@ -496,10 +499,11 @@
   Game.nearMiss = function (o, how) {
     const g = this;
     g.brain.log.nearMiss++; g.nearCount++;
-    g.addCombo(2);
-    const pts = 250 * g.mult; g.score += pts;
+    g.addCombo(2); g.mEvent('near');
+    g.nearStreak = g.clock - g.lastNearT < 6 ? Math.min(8, g.nearStreak + 1) : 1; g.lastNearT = g.clock;
+    const pts = CX * (250 + 125 * (g.nearStreak - 1)) * g.mult * (1 + (g.perk.near || 0)); g.score += pts;
     const sp = g.playerScreen();
-    g.pop('NEAR MISS +' + pts, sp.x, sp.y - 44, '#ff2fb3', 1, 0.9);
+    g.pop('NEAR MISS' + (g.nearStreak > 1 ? ' x' + g.nearStreak : '') + ' +' + cmp(pts), sp.x, sp.y - 44, '#ff2fb3', 1, 0.9);
     g.fx.chroma = 0.8; g.fx.freeze = 0.035; g.shake(1.2); g.fx.zoom = 0.6;
     g.burst(sp.x, sp.y - 12, 10, ['#ff2fb3', '#fff', '#19f3ff'], 90, 0.4, 0);
     g.emit('near', { how });
@@ -519,19 +523,20 @@
       return;
     }
     if (g.god) { p.inv = 0.5; g.emit('godhit'); g.godHits = (g.godHits || 0) + 1; return; }
+    if (g.perk.autododge && !g.autoUsed) { g.autoUsed = true; g.bailOut(o, 'AUTO-DODGE'); return; }
     if (g.up.bail > 0 && !g.bailUsed) { g.bailOut(o); return; }
     g.die(o);
   };
 
   /* Bail-out upgrade: once per run the crash is cancelled, the whole obstacle wave ahead is cleared */
-  Game.bailOut = function (o) {
+  Game.bailOut = function (o, label) {
     const g = this, p = g.p;
-    g.bailUsed = true; g.bails = (g.bails || 0) + 1;
+    if (!label) g.bailUsed = true; g.bails = (g.bails || 0) + 1;
     const zEnd = (o ? o.z + o.depth : 0) + 5;
     g.obs = g.obs.filter(ob => ob.z + ob.depth < -1.5 || ob.z > zEnd);
-    p.inv = 2.2; g.combo = 0; g.comboP = 0; g.comboT = 0;
+    p.inv = 2.2; g.combo = 0; g.comboP = 0; g.comboT = 0; if (g.tkSetback) g.tkSetback();
     g.shake(3.5); g.fx.hurt = 1; g.fx.freeze = 0.08; g.fx.flash = 0.6;
-    g.pop('BAILED OUT', g.W2 || 160, 60, '#ffffff', 2, 1.6);
+    g.pop(label || 'BAILED OUT', g.W2 || 160, 60, '#ffffff', 2, 1.6);
     g.emit('bail');
   };
 
@@ -540,7 +545,7 @@
     p.dead = true; g.state = 'dead'; g.deadT = 0;
     g.fx.freeze = 0.14; g.shake(5); g.fx.flash = 1; g.fx.chroma = 1; g.fx.glitch = 0.8;
     const sp = g.playerScreen();
-    g.burst(sp.x, sp.y - 14, 46, ['#19f3ff', '#ff2fb3', '#fff', '#ffe14d', '#8a3dff'], 150, 0.9, 140);
+    g.burst(sp.x, sp.y - 14, 46, ['#ffd27a', '#e8a24c', '#fff', '#c9c4b5', '#b8503a'], 150, 0.9, 140);
     g.killer = o ? o.type : 'wall'; g.killerObj = o || null; g.killerVis = o && o.vis || null;
     g.emit('crash');
     g.finalScore = Math.floor(g.score);
@@ -548,6 +553,9 @@
     if (g.newBest) { g.best = g.finalScore; try { localStorage.setItem('sl_best', String(g.best)); } catch (e) {} }
     const pk = g.brain.log.peakPred;
     if (pk > g.bestPred) { g.bestPred = pk; try { localStorage.setItem('sl_bestpred', String(pk)); } catch (e) {} }
+    g.finalPts = g.calcPts ? g.calcPts() : Math.floor(g.dist);
+    g.newBestPts = g.finalPts > g.bestPts;
+    if (g.newBestPts) { g.bestPts = g.finalPts; try { localStorage.setItem('sl_bestpts', String(g.bestPts)); } catch (e) {} }
     g.summary = g.brain.summary();
   };
   Game.toOver = function () { this.state = 'over'; this.overT = 0; this.emit('over'); };
