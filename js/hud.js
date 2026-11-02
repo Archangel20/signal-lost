@@ -23,13 +23,14 @@
 
   H.init = function (game, handlers) {
     G = game; H.h = handlers || {};
-    ['hud', 'money', 'mult', 'stars', 'predict', 'jam', 'jamtxt', 'toasts', 'hint', 'subs', 'title', 'pause', 'over', 'wtxt', 'csub', 'crows', 'lanes', 'verdict', 'tip', 'cscore', 'cnew', 'best', 'game', 'mapwrap', 'btn-retry', 'btn-start', 'minimap'].forEach(k => el[k] = $(k));
+    ['hud', 'money', 'mult', 'stars', 'predict', 'jam', 'jamtxt', 'toasts', 'hint', 'subs', 'title', 'pause', 'over', 'wtxt', 'csub', 'crows', 'lanes', 'verdict', 'tip', 'cscore', 'cnew', 'best', 'game', 'mapwrap', 'btn-retry', 'btn-start', 'minimap', 'bail', 'cwallet', 'wallet'].forEach(k => el[k] = $(k));
     el.sm = el.subs.querySelector('.msg');
     let s = '';
     for (let i = 0; i < 5; i++) s += `<path d="${STAR}" transform="translate(${i * 30} 0)"/>`;
     el.stars.innerHTML = s; el.starsP = Array.from(el.stars.querySelectorAll('path'));
     mm = el.minimap; mmc = mm.getContext('2d');
     el['btn-retry'].addEventListener('click', e => { e.stopPropagation(); H.h.retry && H.h.retry(); });
+    el['btn-garage-over'] = $('btn-garage-over');
     el['btn-start'].addEventListener('click', e => { e.stopPropagation(); H.h.start && H.h.start(); });
     el.pause.addEventListener('pointerup', () => H.h.resume && H.h.resume());
     H.resize();
@@ -109,9 +110,13 @@
     const st = G.state, playing = st === 'play' || st === 'dead';
     const inTitle = st === 'title' && G.attract;
     setCls('t_hud', el.hud, 'hidden', !playing || G.attract); // hud visible during play + dead
-    setCls('t_title', el.title, 'hidden', !inTitle);
+    setCls('t_title', el.title, 'hidden', !inTitle); setCls('t_bodytitle', document.body, 'intitle', inTitle);
     setCls('t_pause', el.pause, 'hidden', !paused);
-    if (inTitle) { const b = G.best ? 'Best ' + money(G.best) : ''; setText('best', el.best, b); }
+    if (inTitle) {
+      const sv = global.Save && Save.data, day = sv && sv.daily.d === Save.today() ? sv.daily : { best: 0, runs: 0 };
+      const b = [G.best ? 'Best ' + money(G.best) : '', day.best ? 'Today ' + money(day.best) : ''].filter(Boolean).join('  ·  ');
+      setText('best', el.best, b); if (sv) setText('wallet', el.wallet, money(sv.wallet));
+    }
 
     // dead / over screens
     const overOn = (st === 'dead' && G.deadT > 0.25) || st === 'over';
@@ -137,6 +142,8 @@
     for (let i = 0; i < 5; i++) { const on = i < stars; if (last['s' + i] !== on) { last['s' + i] = on; el.starsP[i].classList.toggle('off', !on); } }
     setCls('t_jamstars', el.stars, 'jam', blind);
     const pp = Math.round(G.brain.predPct());
+    setCls('t_bail', el.bail, 'hidden', !(G.up && G.up.bail > 0));
+    setText('bailtxt', el.bail, G.bailUsed ? 'Bail-out used' : 'Bail-out ready');
     setText('pred', el.predict, blind ? 'City prediction offline' : 'City prediction ' + pp + '%');
     setCls('t_jam', el.jam, 'on', blind);
     if (blind) setText('jamtxt', el.jamtxt, 'Signal jammed ' + Math.ceil(G.blindT) + 's');
@@ -151,11 +158,17 @@
       lastTicker = tk; el.sm.textContent = sentence(tk.text); el.subs.classList.add('on'); subHideAt = performance.now() + 3400;
     }
     if (performance.now() > subHideAt || st === 'dead') el.subs.classList.remove('on');
-    // first-run control hint
-    const hint = G.hint && st === 'play' && G.time < 5.5;
-    setCls('t_hint', el.hint, 'hidden', !hint);
-    if (hint && !last.hintSet) { last.hintSet = true; el.hint.innerHTML = ('ontouchstart' in window) ? '<b>Swipe</b> left / right to change lane · <b>up</b> to jump · <b>down</b> to slide' : '<b>← →</b> change lane · <b>↑</b> jump · <b>↓</b> slide'; }
-    if (!hint) last.hintSet = false;
+    // first-run tutorial: three short hints, then never again (persisted in Save)
+    const tutOn = G.hint && st === 'play', tt = G.time;
+    const stage = !tutOn ? -1 : tt < 4.5 ? 0 : tt < 8.5 ? 1 : tt < 13 ? 2 : -1;
+    setCls('t_hint', el.hint, 'hidden', stage < 0);
+    if (stage !== last.tutStage) {
+      last.tutStage = stage; const touch = document.documentElement.classList.contains('touch');
+      if (stage === 0) el.hint.innerHTML = touch ? '<b>Swipe</b> left / right to change lane' : '<b>← →</b> change lane';
+      if (stage === 1) el.hint.innerHTML = touch ? '<b>Swipe up</b> to jump · <b>down</b> to slide' : '<b>↑</b> jump · <b>↓</b> slide';
+      if (stage === 2) el.hint.innerHTML = 'Grab <b>blue jammers</b> to blind the city · spend cash in the <b>Garage</b>';
+    }
+    if (tutOn && tt >= 13) { G.hint = false; global.Save && Save.tutDone('done'); }
     updateToasts();
     drawMap();
   };
@@ -169,6 +182,11 @@
     el.crows.innerHTML = sm.lines.map(l => `<div class="k">${l.k}</div><div class="v${l.hot ? ' hot' : ''}">${l.v}</div>`).join('');
     const names = ['Left', 'Middle', 'Right'], mx = Math.max.apply(null, sm.share);
     el.lanes.innerHTML = sm.share.map((s, i) => `<div class="ln${s === mx && s >= .5 ? ' hot' : ''}"><div class="bar" style="height:${Math.max(4, Math.round(s * 100))}%"></div>${names[i]} ${Math.round(s * 100)}%</div>`).join('');
+    const sv = global.Save && Save.data;
+    if (sv) {
+      const day = sv.daily.d === Save.today() ? sv.daily : { best: 0 }, earned = G.bankedRun || 0;
+      el.cwallet.textContent = (earned ? '+' + money(earned) + ' banked · ' : '') + 'wallet ' + money(sv.wallet) + (day.best ? ' · today ' + money(day.best) : '');
+    }
     el.verdict.textContent = sentence(sm.verdict); el.tip.textContent = sentence(sm.tip);
   }
   global.HUD = H;

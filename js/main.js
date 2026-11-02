@@ -3,8 +3,12 @@
   'use strict';
   const G = Game, cv = document.getElementById('game');
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  let W = 0, H = 0, audioOn = false, paused = false, frozen = false, lastBlind = false, startedAt = 0, glOK = true;
-  try { G.hint = !localStorage.getItem('sl_played'); } catch (e) { G.hint = true; }
+  let lastStars = 0, W = 0, H = 0, audioOn = false, paused = false, frozen = false, lastBlind = false, startedAt = 0, glOK = true;
+  G.hint = !(Save.data.tut && Save.data.tut.done);
+  function syncUp() { G.up = Object.assign({ jam: 0, magnet: 0, bail: 0 }, Save.data.up); }
+  function syncOutfit() { if (glOK) { try { Render.setOutfit(Save.OUTFITS[Save.data.outfit] || Save.OUTFITS.courier); } catch (e) { console.warn('outfit', e); } } }
+  function syncAudioSettings() { const s = Save.data.set; Sfx.setMusicEnabled(s.music); Sfx.setSfxEnabled(s.sfx); }
+  syncUp();
 
   /* ---------- sizing (full-resolution, devicePixelRatio aware; no low-res buffer) ---------- */
   function resize() {
@@ -15,16 +19,26 @@
   try { Render.init(cv); } catch (err) { glOK = false; console.error('WebGL init failed', err); document.getElementById('nogl').classList.remove('hidden'); }
   HUD.init(G, { start: () => press(), retry: () => retry(), resume: () => setPaused(false) });
   window.addEventListener('resize', resize); window.addEventListener('orientationchange', () => setTimeout(resize, 100));
-  resize(); G.reset(true);
+  resize(); G.reset(true); syncOutfit();
+  Shop.init({
+    ui: () => { wake(); try { Sfx.uiBlip(); } catch (e) {} },
+    onChange: kind => { syncUp(); syncOutfit(); syncAudioSettings(); syncMute(); try { if (kind === 'buy') Sfx.buy(); else if (kind === 'equip') Sfx.uiBlip(); } catch (e) {} },
+    onClose: () => { try { Sfx.uiBlip(); } catch (e) {} }
+  });
 
   /* ---------- audio ---------- */
   function wake() {
-    if (!audioOn) { audioOn = true; try { Sfx.init(); Sfx.startMusic(); } catch (e) { console.warn('audio', e); } }
+    if (!audioOn) { audioOn = true; try { Sfx.init(); syncAudioSettings(); Sfx.startMusic(); } catch (e) { console.warn('audio', e); } }
     else if (Sfx.ctx && Sfx.ctx.state === 'suspended') Sfx.ctx.resume();
   }
   function drain() {
     const ev = G.events; if (!ev.length) return;
     for (const e of ev) {
+      if (e.type === 'crash' && !G.god && !G.attract && !G.runSaved) { // bank the run (always, even if audio is off)
+        G.runSaved = true; G.bankedRun = G.finalScore || 0;
+        Save.recordRun({ score: G.finalScore || 0, time: G.time, near: G.nearCount, jams: G.jams, bails: G.bails });
+      }
+      if ((e.type === 'crash' || e.type === 'bail') && !G.god && Save.data.set.haptics && navigator.vibrate) { try { navigator.vibrate(e.type === 'crash' ? [60, 40, 140] : 45); } catch (_) {} }
       if (!audioOn) continue;
       try {
         switch (e.type) {
@@ -36,7 +50,8 @@
           case 'near': Sfx.near(); break;
           case 'outplay': Sfx.outplay(); break;
           case 'bump': case 'edge': Sfx.bump(); break;
-          case 'crash': Sfx.crash(); Sfx.duck(); break;
+          case 'crash': Sfx.crash(); break;
+          case 'bail': Sfx.bail(); break;
           case 'chip': Sfx.glitch(); Sfx.duck(); break;
           case 'blindEnd': Sfx.glitchEnd(); break;
           case 'speedup': Sfx.speedup(); break;
@@ -50,9 +65,8 @@
 
   /* ---------- state flow ---------- */
   function startGame() {
-    wake(); G.reset(false); paused = false; G.paused = false; startedAt = performance.now();
-    try { Sfx.start(); localStorage.setItem('sl_played', '1'); } catch (e) {}
-    G.hint = G.hint; 
+    wake(); syncUp(); G.reset(false); G.runSaved = false; G.bankedRun = 0; lastStars = 0; paused = false; G.paused = false; startedAt = performance.now();
+    try { Sfx.start(); } catch (e) {}
   }
   function setPaused(p) {
     if (p === paused) return;
@@ -73,6 +87,8 @@
   window.addEventListener('keydown', e => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const k = e.code;
+    if (Shop.isOpen()) { if (k === 'Escape') { e.preventDefault(); Shop.closeAll(); } return; }       // modals own the keyboard
+    if ((k === 'Enter' || k === 'Space') && e.target && e.target.closest && e.target.closest('button')) return; // let focused buttons click
     if (KEYS[k] || k === 'Enter' || k === 'Escape' || k === 'KeyP') e.preventDefault();
     if (e.repeat && (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'KeyA' || k === 'KeyD' || k === 'ArrowUp' || k === 'KeyW' || k === 'Space' || k === 'ArrowDown' || k === 'KeyS')) return;
     if (k === 'KeyM') { wake(); toggleMute(); return; }
@@ -89,9 +105,10 @@
   /* ---------- pointer / swipe ---------- */
   let ptr = null;
   const TH = 16;
-  const isBtn = e => !!(e.target.closest && e.target.closest('button'));
+  const isBtn = e => !!(e.target.closest && e.target.closest('button, .modal'));
   document.addEventListener('pointerdown', e => {
     if (isBtn(e)) return;
+    if (G.state === 'title' && !G.paused) { wake(); return; }                     // title: only the START button starts a run (also lets the page scroll)
     e.preventDefault(); wake();
     try { document.body.setPointerCapture(e.pointerId); } catch (_) {}
     ptr = { id: e.pointerId, x: e.clientX, y: e.clientY, ox: e.clientX, oy: e.clientY, moved: false, t: performance.now() };
@@ -111,7 +128,7 @@
   };
   document.addEventListener('pointerup', up); document.addEventListener('pointercancel', () => { ptr = null; });
   document.addEventListener('contextmenu', e => e.preventDefault());
-  document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+  document.addEventListener('touchmove', e => { if (!(e.target.closest && e.target.closest('.scroll'))) e.preventDefault(); }, { passive: false });
 
   /* ---------- buttons ---------- */
   function toggleMute() { try { Sfx.toggleMute(); } catch (e) {} syncMute(); }
@@ -142,6 +159,12 @@
         drain();
         if (audioOn) {
           try {
+            Sfx.setMode(G.state === 'play' && !G.attract ? 'play' : G.state === 'dead' || G.state === 'over' ? 'over' : 'menu');
+            if (G.state === 'play' && !G.attract) {
+              const stars = clamp(Math.ceil((G.threat || 1) / 2), 1, 5);
+              if (lastStars && stars > lastStars) Sfx.siren(stars);
+              lastStars = stars;
+            }
             Sfx.setIntensity(G.state === 'play' || G.attract ? (G.threat || 1) : 1, clamp((G.speed - 20) / 22, 0, 1));
             const b = G.blindT > 0; if (b !== lastBlind) { lastBlind = b; Sfx.setBlind(b); }
           } catch (e) {}
@@ -155,11 +178,11 @@
 
   /* ---------- debug / test API ---------- */
   window.SL = {
-    G, Render, HUD, resize,
+    Save, Shop, syncUp, syncOutfit, G, Render, HUD, resize,
     freeze(v) { frozen = v !== false; },
     step(secs) { for (let i = 0; i < secs / DT; i++) G.step(DT); drain(); },
     draw(dt) { Render.frame(G, dt || 1 / 60); HUD.update(dt || 1 / 60, paused); },
-    start(opts) { wake(); G.reset(false, opts || {}); paused = false; G.paused = false; G.hint = false; },
+    start(opts) { wake(); syncUp(); G.runSaved = false; G.reset(false, opts || {}); paused = false; G.paused = false; G.hint = false; },
     sim(secs, opts) { frozen = true; G.reset(false, Object.assign({ god: true, noflash: true }, opts)); G.hint = false; const n = Math.round(secs / DT); for (let i = 0; i < n; i++) { G.step(DT); G.events.length = 0; } frozen = false; return { time: G.time, score: Math.floor(G.score), pred: G.brain.predPct(), godHits: G.godHits || 0, waves: G.waveLog.length }; },
     state() { const p = G.p; return { state: G.state, lane: p.lane, y: p.y, slide: p.slide, grounded: p.grounded, score: Math.floor(G.score), time: G.time, coins: G.coins, threat: G.threat, pred: G.brain.predPct(), blind: G.blindT, mult: G.mult, combo: G.combo, paused, W, H, stats: glOK ? Render.stats() : null }; },
     pause: setPaused

@@ -319,7 +319,7 @@
     const lL = leg(-1), lR = leg(1);
     root.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
     scene.add(root);
-    return { root, rig, torso, head, aL, aR, lL, lR };
+    return { root, rig, torso, head, aL, aR, lL, lR, mats: { hood, hoodD, bag, pants, stripe } };
   }
   function updatePlayer(G, dt) {
     const p = G.p; const a = 1 - Math.exp(-dt * 14);
@@ -651,11 +651,19 @@
     dpr = Math.min(global.devicePixelRatio || 1, mobile ? 2 : 2); maxRatio = mobile ? .85 : 1; ratio = maxRatio;
     scene = new T.Scene(); scene.fog = new T.Fog(0xb98c6c, 40, 190);
     camera = new T.PerspectiveCamera(60, 16 / 9, .3, 420);
-    buildScene(); P = buildPlayer(); updateEnv({ attract: true, time: 0 });
+    buildScene(); P = buildPlayer(); R.setOutfit(wantOutfit); updateEnv({ attract: true, time: 0 });
     R.ready = true; R.resize(global.innerWidth, global.innerHeight);
     if (document.fonts && document.fonts.load) document.fonts.load('700 40px Oswald').then(() => { texJobs.forEach(t => t.userData.redraw && t.userData.redraw()); for (const e of (pools.board ? pools.board.active.concat(pools.board.free) : [])) if (e.text) redrawBoard(e, e.text); }).catch(() => {});
   };
   R.resize = function (w, h) { W = Math.max(2, w | 0); H = Math.max(2, h | 0); if (renderer) { applyRatio(); camera.aspect = W / H; camera.updateProjectionMatrix(); } };
+  /* garage outfits: recolour the courier's shared materials (cheap — no new geometry) */
+  let wantOutfit = null;
+  R.setOutfit = function (o) {
+    wantOutfit = o; if (!P || !o) return;
+    const m = P.mats; m.hood.color.setHex(o.hood); m.hoodD.color.setHex(o.hoodD); m.bag.color.setHex(o.bag); m.pants.color.setHex(o.pants);
+    m.stripe.color.setHex(o.stripe); m.stripe.emissive.setHex(o.stripeE);
+  };
+  R.outfitHex = () => (P ? P.mats.hood.color.getHex() : null);
   R.playerPos = () => ({ x: 0, y: 0 });
   R.layout = () => {};
   R.stats = () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, ratio, dpr, textures: renderer.info.memory.textures, geometries: renderer.info.memory.geometries });

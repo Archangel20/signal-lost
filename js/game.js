@@ -23,6 +23,7 @@
     waveLog: [], nextChipAt: 9, lastGap: 0,
     p: null
   };
+  Game.up = { jam: 0, magnet: 0, bail: 0 }; // garage upgrade levels, set by main.js from Save before a run
   try { Game.best = +localStorage.getItem('sl_best') || 0; Game.bestPred = +localStorage.getItem('sl_bestpred') || 0; } catch (e) {}
 
   /* ------------------------------------------------------------ setup */
@@ -35,7 +36,7 @@
     g.time = 0; g.dist = 0; g.speed = 20; g.score = 0; g.coins = 0; g.q.length = 0;
     g.obs = []; g.coinsL = []; g.chips = []; g.blds = [[], []]; g.boards = []; g.waves = []; g.parts = []; g.pops = [];
     g.blindT = 0; g.combo = 0; g.comboP = 0; g.comboT = 0; g.mult = 1; g.waveLog = []; g.nextChipAt = 8.5; g.nextBoardZ = 70; g.boardSide = 0;
-    g.nextCoinGap = 0; g.deadT = 0; g.overT = 0; g.newBest = false; g.nearCount = 0; g.speedTier = 0;
+    g.bailUsed = false; g.bails = 0; g.jams = 0; g.jamTotal = 6.5; g.nextCoinGap = 0; g.deadT = 0; g.overT = 0; g.newBest = false; g.nearCount = 0; g.speedTier = 0;
     g.fx = { shake: 0, flash: opts.noflash ? 0 : 0.6, glitch: 0, chroma: 0, freeze: 0, zoom: 0, hurt: 0, eyeFlash: 0, eyeMiss: 0, speedPulse: 1 };
     g.p = { lane: 1, prevLane: 1, x: 1, y: 0, vy: 0, grounded: true, slide: 0, slideBuf: 0, jumpBuf: 0, fast: false, phase: 0,
             inv: 0, dead: false, lean: 0, inLane: [-9, -9, -9], slideStart: -9, jumpStart: -9, landT: -9, switchT: -9 };
@@ -353,7 +354,7 @@
     fx.glitch = Math.max(0, fx.glitch - dt * 2.5);
     if (g.blindT > 0) {
       g.blindT -= dt;
-      { const el = 6.5 - g.blindT; fx.glitch = Math.max(fx.glitch, el < 0.7 ? 0.7 - el * 0.6 : 0.1 + (Math.sin(g.clock * 5.3) > 0.9 ? 0.4 : 0) + (g.blindT < 1 ? 0.25 : 0)); }
+      { const el = g.jamTotal - g.blindT; fx.glitch = Math.max(fx.glitch, el < 0.7 ? 0.7 - el * 0.6 : 0.1 + (Math.sin(g.clock * 5.3) > 0.9 ? 0.4 : 0) + (g.blindT < 1 ? 0.25 : 0)); }
       if (g.blindT <= 0) { g.blindT = 0; br.unblind(); g.emit('blindEnd'); g.taunt.next = 0; g.pushTicker('REBOOTING... I REMEMBER NOTHING'); fx.flash = 0.5; }
     }
 
@@ -378,6 +379,20 @@
 
     // ---- collisions & near misses
     g.collide(dt);
+
+    // ---- cash magnet (garage upgrade): coins ahead in nearby lanes fly to the courier
+    if (g.up.magnet > 0 && !p.dead) {
+      const lv = g.up.magnet, rng = [0, 7, 11, 16][lv], lanes = lv >= 2 ? 1.6 : 1.1;
+      for (const c of g.coinsL) {
+        if (c.taken) continue;
+        if (!c.mag && c.z > 0.9 && c.z < rng && Math.abs(c.lane - p.x) <= lanes) c.mag = true;
+        if (c.mag) {
+          const k = 1 - Math.exp(-dt * 16);
+          c.lane += (p.x - c.lane) * k; c.y += (p.y + 0.55 - c.y) * k;
+          if (c.z > 0.4) c.z = Math.max(0.3, c.z - 30 * dt);
+        }
+      }
+    }
 
     // ---- pickups
     for (const c of g.coinsL) {
@@ -442,7 +457,7 @@
   Game.grabChip = function () {
     const g = this, br = g.brain;
     br.blind();
-    g.blindT = 6.5; g.fx.glitch = 1; g.fx.flash = 1; g.fx.chroma = 1; g.fx.freeze = 0.07; g.shake(2.5);
+    g.jamTotal = 6.5 + 1.5 * (g.up.jam || 0); g.blindT = g.jamTotal; g.jams++; g.fx.glitch = 1; g.fx.flash = 1; g.fx.chroma = 1; g.fx.freeze = 0.07; g.shake(2.5);
     for (const w of g.waves) w.sampled = true; // wipe pending bets
     g.addCombo(3); g.score += 1000 * Math.max(1, g.mult);
     g.pop('SIGNAL JAMMED', g.W2 || 160, 66, '#ff2fb3', 2, 1.4);
@@ -504,7 +519,20 @@
       return;
     }
     if (g.god) { p.inv = 0.5; g.emit('godhit'); g.godHits = (g.godHits || 0) + 1; return; }
+    if (g.up.bail > 0 && !g.bailUsed) { g.bailOut(o); return; }
     g.die(o);
+  };
+
+  /* Bail-out upgrade: once per run the crash is cancelled, the whole obstacle wave ahead is cleared */
+  Game.bailOut = function (o) {
+    const g = this, p = g.p;
+    g.bailUsed = true; g.bails = (g.bails || 0) + 1;
+    const zEnd = (o ? o.z + o.depth : 0) + 5;
+    g.obs = g.obs.filter(ob => ob.z + ob.depth < -1.5 || ob.z > zEnd);
+    p.inv = 2.2; g.combo = 0; g.comboP = 0; g.comboT = 0;
+    g.shake(3.5); g.fx.hurt = 1; g.fx.freeze = 0.08; g.fx.flash = 0.6;
+    g.pop('BAILED OUT', g.W2 || 160, 60, '#ffffff', 2, 1.6);
+    g.emit('bail');
   };
 
   Game.die = function (o) {
