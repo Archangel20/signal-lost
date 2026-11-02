@@ -9,6 +9,7 @@
 <meta property="og:title" content="Signal Lost">
 <meta property="og:description" content="The city is learning you. Stay unpredictable.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2314161b'/%3E%3Cpath d='M16 5l3.4 7 7.6 1-5.6 5.2 1.5 7.6L16 22l-6.9 3.8 1.5-7.6L5 13l7.6-1z' fill='%23fff'/%3E%3C/svg%3E">
+<script>(function(){var d=document.documentElement,m=window.matchMedia;try{if((m&&m('(pointer:coarse)').matches)||(navigator.maxTouchPoints>0&&m&&!m('(hover:hover)').matches))d.className+=' touch';}catch(e){}})();</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -23,6 +24,7 @@
     </div>
     <div id="predict">City prediction 0%</div>
     <div id="jam"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9m0 0 4 4m-4-4-4 4M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".55"/></svg><span id="jamtxt">Signal jammed</span></div>
+    <div id="bail" class="hidden">Bail-out ready</div>
   </div>
   <div id="mapwrap"><canvas id="minimap" aria-label="Minimap"></canvas></div>
   <div id="toasts"></div>
@@ -30,18 +32,27 @@
   <div id="subs"><span class="who">City Watch</span><span class="msg"></span></div>
 </div>
 
-<div id="title" class="screen">
+<div id="title" class="screen scroll">
   <div class="tcol">
     <div class="kicker">Endless street runner · adaptive city AI</div>
     <h1>Signal<br>Lost</h1>
     <p class="tag">The city is learning you.</p>
     <ul class="how">
-      <li>It tracks which lane you live in, which way you dodge, when you jump.</li>
+      <li>It tracks which lane you live in and which way you dodge.</li>
       <li>Then it puts the roadblock exactly where you will be.</li>
       <li>Stay unpredictable. Grab a signal jammer to blind it.</li>
     </ul>
-    <button id="btn-start" type="button" class="cta">Press any key or tap to start</button>
-    <div class="ctrl"><b>← →</b> lane &nbsp; <b>↑</b> jump &nbsp; <b>↓</b> slide &nbsp; <b>P</b> pause &nbsp; <b>M</b> mute &nbsp; · &nbsp; swipe on phones</div>
+    <button id="btn-start" type="button" class="start"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg><span>Start</span></button>
+    <div class="subact">
+      <button id="btn-garage" type="button" class="sec"><span class="l"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3zM8 20v-6h8v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>Garage</span><small id="wallet"></small></button>
+      <button id="btn-settings" type="button" class="sec"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>Settings</span></button>
+    </div>
+    <div class="ctrl ctrl-kb"><span><b>← →</b> move</span><span><b>↑</b> jump</span><span><b>↓</b> slide</span><span><b>P</b> pause</span><span><b>M</b> mute</span></div>
+    <div class="ctrl ctrl-touch">
+      <span class="chip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Swipe to move</span>
+      <span class="chip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V5M6 11l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Jump</span>
+      <span class="chip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v15M6 13l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Slide</span>
+    </div>
     <div id="best"></div>
   </div>
 </div>
@@ -56,25 +67,49 @@
     <div id="lanes"></div>
     <div id="verdict"></div>
     <div id="tip"></div>
+    <div id="cwallet"></div>
     <div class="cfoot">
       <div class="sc"><small>Earned</small><b id="cscore">$0</b><i id="cnew"></i></div>
       <button id="btn-retry" type="button" class="cta">Try again <small>(Space)</small></button>
+    </div>
+  </div>
+  <div class="oa"><button id="btn-garage-over" type="button" class="sec"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3zM8 20v-6h8v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Garage</span></button></div>
+</div>
+
+<div id="shop" class="screen modal hidden" role="dialog" aria-label="Garage">
+  <div class="mcard">
+    <div class="mhead"><h2>Garage</h2><div class="wal"><small>Cash</small><b id="shop-wallet">$0</b></div><button id="shop-close" type="button" class="sec close" aria-label="Close garage">Back</button></div>
+    <div class="mbody scroll" id="shop-body"></div>
+  </div>
+</div>
+
+<div id="settings" class="screen modal hidden" role="dialog" aria-label="Settings">
+  <div class="mcard narrow">
+    <div class="mhead"><h2>Settings</h2><button id="set-close" type="button" class="sec close" aria-label="Close settings">Done</button></div>
+    <div class="mbody">
+      <button type="button" class="row" data-set="master" role="switch"><span>Sound</span><i></i></button>
+      <button type="button" class="row" data-set="music" role="switch"><span>Music</span><i></i></button>
+      <button type="button" class="row" data-set="sfx" role="switch"><span>Effects</span><i></i></button>
+      <button type="button" class="row" data-set="haptics" role="switch"><span>Vibration</span><i></i></button>
     </div>
   </div>
 </div>
 
 <div id="btns">
   <button id="btn-mute" type="button" aria-label="Toggle sound (M)" title="Sound (M)"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z" fill="currentColor"/><path class="w" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+  <button id="btn-gear" type="button" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
   <button id="btn-full" type="button" aria-label="Toggle fullscreen (F)" title="Fullscreen (F)"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
 </div>
 <noscript><p style="color:#fff;font-family:sans-serif;text-align:center">Signal Lost needs JavaScript and WebGL.</p></noscript>
 <div id="nogl" class="screen hidden"><div class="pcard"><h2>WebGL unavailable</h2><p>This game needs a browser with WebGL enabled.</p></div></div>
 <script src="js/vendor/three.min.js"></script>
+<script src="js/save.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/game.js"></script>
 <script src="js/render3d.js"></script>
 <script src="js/hud.js"></script>
+<script src="js/shop.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
