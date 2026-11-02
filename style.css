@@ -212,6 +212,7 @@ html.touch .cta small{display:none}
 #chips{display:flex;justify-content:flex-end;gap:calc(var(--u)*.7);margin-top:calc(var(--u)*.7);flex-wrap:wrap}
 #chips span{padding:calc(var(--u)*.4) calc(var(--u)*1);font-size:calc(var(--u)*1.55);letter-spacing:.08em;text-transform:uppercase;font-weight:700;border-radius:3px;text-shadow:none;color:#17130a;background:var(--gold)}
 #chips #chip-x2{background:#79b95f}
+#chips #chip-foot{background:#b4573d;color:#f4efe2}
 #stagebanner{position:absolute;left:50%;top:calc(var(--u)*13);transform:translate(-50%,-8px);width:min(92vw,calc(var(--u)*70));text-align:center;opacity:0;transition:opacity .55s ease,transform .55s ease}
 #stagebanner.on{opacity:1;transform:translate(-50%,0)}
 #stagebanner small{display:block;font-size:calc(var(--u)*1.9);letter-spacing:.28em;text-transform:uppercase;color:var(--gold);font-weight:600;padding-left:.28em}
