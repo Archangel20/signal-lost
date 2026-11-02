@@ -17,7 +17,8 @@
 
 <div id="hud" class="hidden" aria-live="off">
   <div id="topright">
-    <div id="money">$0</div>
+    <div class="lbl">Cash</div>
+    <div id="cash" aria-label="Cash"><svg class="coin" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8.6" fill="#d9a93f" stroke="#7a5a14" stroke-width="1.4"/><circle cx="10" cy="10" r="5.6" fill="none" stroke="#8a6a1c" stroke-width="1.1"/></svg><span id="money">₦0</span></div>
     <div id="mult"></div>
     <div id="wanted" aria-label="City threat level">
       <svg id="stars" viewBox="0 0 150 30" aria-hidden="true"></svg>
@@ -25,7 +26,18 @@
     <div id="predict">City prediction 0%</div>
     <div id="jam"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9m0 0 4 4m-4-4-4 4M5 20h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".55"/></svg><span id="jamtxt">Signal jammed</span></div>
     <div id="bail" class="hidden">Bail-out ready</div>
+    <div id="chips"><span id="chip-turbo" class="hidden">Turbo</span><span id="chip-x2" class="hidden">Double cash</span><span id="chip-perk" class="hidden"></span></div>
   </div>
+  <div id="quest" aria-label="Score, letters and missions">
+    <div id="scorebox" aria-label="Score"><small>Score</small><b id="score">0</b></div>
+    <div id="word"></div>
+    <div id="loctask" class="hidden"></div>
+    <div id="missions"></div>
+    <div id="daily"></div>
+    <div id="rival"></div>
+  </div>
+  <div id="stagebanner"><small id="sb-k"></small><b id="sb-n"></b><span id="sb-s"></span></div>
+  <div id="nowplaying"></div>
   <div id="mapwrap"><canvas id="minimap" aria-label="Minimap"></canvas></div>
   <div id="toasts"></div>
   <div id="hint" class="hidden"></div>
@@ -38,13 +50,15 @@
     <h1>Signal<br>Lost</h1>
     <p class="tag">The city is learning you.</p>
     <ul class="how">
-      <li>It tracks which lane you live in and which way you dodge.</li>
-      <li>Then it puts the roadblock exactly where you will be.</li>
-      <li>Stay unpredictable. Grab a signal jammer to blind it.</li>
+      <li>The city learns your lane and sets the roadblock where you will be. Stay unpredictable.</li>
+      <li>Steer into cash and letters to collect them. Nothing comes to you by itself.</li>
+      <li>Score is how far you run. Cash is what you grab. Cash unlocks characters and upgrades.</li>
+      <li>Spell the word, finish missions, ride ramps and turbo pads. Ten locations to unlock, new music every run.</li>
     </ul>
+    <button id="btn-loc" type="button" class="locbtn" aria-label="Choose location"><span class="k">Location</span><b id="loc-name">Lagos Island</b><span class="go">Change</span></button>
     <button id="btn-start" type="button" class="start"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z" fill="currentColor"/></svg><span>Start</span></button>
     <div class="subact">
-      <button id="btn-garage" type="button" class="sec"><span class="l"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3zM8 20v-6h8v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>Garage</span><small id="wallet"></small></button>
+      <button id="btn-chars" type="button" class="sec"><span class="l"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 20.5c0-4.2 3.3-6.6 7.5-6.6s7.5 2.4 7.5 6.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Characters</span><small id="wallet"></small></button>
       <button id="btn-settings" type="button" class="sec"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>Settings</span></button>
     </div>
     <div class="ctrl ctrl-kb"><span><b>← →</b> move</span><span><b>↑</b> jump</span><span><b>↓</b> slide</span><span><b>P</b> pause</span><span><b>M</b> mute</span></div>
@@ -63,22 +77,25 @@
   <div id="wasted"><span id="wtxt">Wasted</span></div>
   <div id="card">
     <div class="chead"><span>How the city read you</span><span id="csub"></span></div>
+    <div id="cstats"></div>
     <div id="crows"></div>
     <div id="lanes"></div>
     <div id="verdict"></div>
     <div id="tip"></div>
     <div id="cwallet"></div>
     <div class="cfoot">
-      <div class="sc"><small>Earned</small><b id="cscore">$0</b><i id="cnew"></i></div>
+      <span id="cscore" class="hidden"></span><i id="cnew" class="hidden"></i>
       <button id="btn-retry" type="button" class="cta">Try again <small>(Space)</small></button>
     </div>
   </div>
-  <div class="oa"><button id="btn-garage-over" type="button" class="sec"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9H3zM8 20v-6h8v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Garage</span></button></div>
+  <div class="oa"><button id="btn-chars-over" type="button" class="sec"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.8" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 20.5c0-4.2 3.3-6.6 7.5-6.6s7.5 2.4 7.5 6.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>Characters</span></button></div>
 </div>
 
-<div id="shop" class="screen modal hidden" role="dialog" aria-label="Garage">
+<div id="shop" class="screen modal hidden" role="dialog" aria-label="Characters">
   <div class="mcard">
-    <div class="mhead"><h2>Garage</h2><div class="wal"><small>Cash</small><b id="shop-wallet">$0</b></div><button id="shop-close" type="button" class="sec close" aria-label="Close garage">Back</button></div>
+    <div class="mhead"><h2>Characters</h2><div class="wal"><small>Cash</small><b id="shop-wallet">₦0</b></div><button id="shop-close" type="button" class="sec close" aria-label="Close characters">Back</button></div>
+    <div id="shop-tabs" role="tablist"><button type="button" role="tab" data-tab="chars" aria-selected="true">Characters</button><button type="button" role="tab" data-tab="loc" aria-selected="false">Locations</button><button type="button" role="tab" data-tab="up" aria-selected="false">Upgrades</button></div>
+    <div id="hero" class="hidden"><canvas id="hero-cv" width="800" height="400" aria-label="Character preview"></canvas><div class="hl"><span class="tier" id="hero-tier"></span><b id="hero-name"></b></div></div>
     <div class="mbody scroll" id="shop-body"></div>
   </div>
 </div>
@@ -90,6 +107,7 @@
       <button type="button" class="row" data-set="master" role="switch"><span>Sound</span><i></i></button>
       <button type="button" class="row" data-set="music" role="switch"><span>Music</span><i></i></button>
       <button type="button" class="row" data-set="sfx" role="switch"><span>Effects</span><i></i></button>
+      <button type="button" class="row" data-set="voice" role="switch"><span>Voice</span><i></i></button>
       <button type="button" class="row" data-set="haptics" role="switch"><span>Vibration</span><i></i></button>
     </div>
   </div>
@@ -106,7 +124,10 @@
 <script src="js/save.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/ai.js"></script>
+<script src="js/stages.js"></script>
 <script src="js/game.js"></script>
+<script src="js/features.js"></script>
+<script src="js/chars3d.js"></script>
 <script src="js/render3d.js"></script>
 <script src="js/hud.js"></script>
 <script src="js/shop.js"></script>
